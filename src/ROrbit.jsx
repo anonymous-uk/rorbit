@@ -455,9 +455,9 @@ export default function ROrbit() {
         ? `\n\nExisting nodes — add to "connections" ONLY for clear, unambiguous conceptual links. Empty array otherwise:\n${nodes.slice(-40).map(n => `[${n.id}] ${n.title} (${n.category}): ${n.insight}`).join("\n")}`
         : "";
       const res  = await fetch("/api/chat", {
-        method:"POST",
+        method:"POST", headers:{ "Content-Type":"application/json" },
         body: JSON.stringify({
-          model:"claude-sonnet-4-20250514", max_tokens:700,
+          model:"claude-sonnet-4-5", max_tokens:700,
           system:"Knowledge graph classifier. Return ONLY valid JSON. No markdown.",
           messages:[{ role:"user", content:`Thought: "${input}"\nCategories: ${CATEGORIES.map(c => c.name).join(", ")}${existingCtx}\n\nReturn JSON:\n{"title":"4-7 word title","insight":"1-2 sentence distillation","category":"exact category name","tags":["2-4 tags"],"connections":["nodeId — max 3, genuine only, else empty"]}` }]
         })
@@ -489,8 +489,8 @@ export default function ROrbit() {
     try {
       const ctx = nodes.map(n => `[${n.id}] ${n.title} — ${n.category} — ${n.insight}`).join("\n");
       const res = await fetch("/api/chat", {
-        method:"POST",
-        body: JSON.stringify({ model:"claude-sonnet-4-20250514", max_tokens:600, system:"Knowledge graph search. Return ONLY valid JSON.", messages:[{ role:"user", content:`Question: "${queryText}"\n\nNodes:\n${ctx}\n\nReturn JSON:\n{"relevant_ids":["up to 5 node IDs"],"synthesis":"2-3 sentence synthesis"}` }] })
+        method:"POST", headers:{ "Content-Type":"application/json" },
+        body: JSON.stringify({ model:"claude-sonnet-4-5", max_tokens:600, system:"Knowledge graph search. Return ONLY valid JSON.", messages:[{ role:"user", content:`Question: "${queryText}"\n\nNodes:\n${ctx}\n\nReturn JSON:\n{"relevant_ids":["up to 5 node IDs"],"synthesis":"2-3 sentence synthesis"}` }] })
       });
       const data = await res.json();
       const p    = JSON.parse((data.content?.find(b => b.type==="text")?.text ?? "{}").replace(/```json|```/g,"").trim());
@@ -514,8 +514,8 @@ export default function ROrbit() {
     setReviewNode(rnd); setSelected(rnd); setChallenge(""); setEditing(false); setChallenging(true);
     try {
       const res = await fetch("/api/chat", {
-        method:"POST",
-        body: JSON.stringify({ model:"claude-sonnet-4-20250514", max_tokens:250, system:"Generate one sharp, thought-provoking question. Return ONLY the question.", messages:[{ role:"user", content:`Concept: "${rnd.title}" — ${rnd.insight}\nCategory: ${rnd.category}\n\nAsk one pointed question that challenges assumptions or demands deeper understanding.` }] })
+        method:"POST", headers:{ "Content-Type":"application/json" },
+        body: JSON.stringify({ model:"claude-sonnet-4-5", max_tokens:250, system:"Generate one sharp, thought-provoking question. Return ONLY the question.", messages:[{ role:"user", content:`Concept: "${rnd.title}" — ${rnd.insight}\nCategory: ${rnd.category}\n\nAsk one pointed question that challenges assumptions or demands deeper understanding.` }] })
       });
       const data = await res.json();
       setChallenge(data.content?.find(b => b.type==="text")?.text?.trim() ?? "");
@@ -555,8 +555,8 @@ export default function ROrbit() {
     try {
       const summary = nodes.map(n => `${n.title} [${n.category}]: ${n.insight}`).join("\n");
       const res = await fetch("/api/chat", {
-        method:"POST",
-        body: JSON.stringify({ model:"claude-sonnet-4-20250514", max_tokens:1200, system:"You are a knowledge curator. Return ONLY valid JSON.", messages:[{ role:"user", content:`Based on this knowledge base, recommend resources that genuinely extend or challenge this thinking.\n\nNodes:\n${summary}\n\nReturn JSON:\n{"books":[{"title":"","author":"","reason":""}],"podcasts":[{"title":"","host":"","reason":""}],"videos":[{"title":"","creator":"","reason":""}]}\n\nExactly 3 per array. Be specific.` }] })
+        method:"POST", headers:{ "Content-Type":"application/json" },
+        body: JSON.stringify({ model:"claude-sonnet-4-5", max_tokens:1200, system:"You are a knowledge curator. Return ONLY valid JSON.", messages:[{ role:"user", content:`Based on this knowledge base, recommend resources that genuinely extend or challenge this thinking.\n\nNodes:\n${summary}\n\nReturn JSON:\n{"books":[{"title":"","author":"","reason":""}],"podcasts":[{"title":"","host":"","reason":""}],"videos":[{"title":"","creator":"","reason":""}]}\n\nExactly 3 per array. Be specific.` }] })
       });
       const data = await res.json();
       const p    = JSON.parse((data.content?.find(b => b.type==="text")?.text ?? "{}").replace(/```json|```/g,"").trim());
