@@ -454,8 +454,8 @@ export default function ROrbit() {
       const existingCtx = nodes.length > 0
         ? `\n\nExisting nodes — add to "connections" ONLY for clear, unambiguous conceptual links. Empty array otherwise:\n${nodes.slice(-40).map(n => `[${n.id}] ${n.title} (${n.category}): ${n.insight}`).join("\n")}`
         : "";
-      const res  = await fetch("https://api.anthropic.com/v1/messages", {
-        method:"POST", headers:{ "Content-Type":"application/json" },
+      const res  = await fetch("/api/chat", {
+        method:"POST",
         body: JSON.stringify({
           model:"claude-sonnet-4-20250514", max_tokens:700,
           system:"Knowledge graph classifier. Return ONLY valid JSON. No markdown.",
@@ -488,8 +488,8 @@ export default function ROrbit() {
     setQuerying(true); setSynthesis(""); setHighlighted([]);
     try {
       const ctx = nodes.map(n => `[${n.id}] ${n.title} — ${n.category} — ${n.insight}`).join("\n");
-      const res = await fetch("https://api.anthropic.com/v1/messages", {
-        method:"POST", headers:{ "Content-Type":"application/json" },
+      const res = await fetch("/api/chat", {
+        method:"POST",
         body: JSON.stringify({ model:"claude-sonnet-4-20250514", max_tokens:600, system:"Knowledge graph search. Return ONLY valid JSON.", messages:[{ role:"user", content:`Question: "${queryText}"\n\nNodes:\n${ctx}\n\nReturn JSON:\n{"relevant_ids":["up to 5 node IDs"],"synthesis":"2-3 sentence synthesis"}` }] })
       });
       const data = await res.json();
@@ -513,8 +513,8 @@ export default function ROrbit() {
     setNodes(stamped); persist(stamped);
     setReviewNode(rnd); setSelected(rnd); setChallenge(""); setEditing(false); setChallenging(true);
     try {
-      const res = await fetch("https://api.anthropic.com/v1/messages", {
-        method:"POST", headers:{ "Content-Type":"application/json" },
+      const res = await fetch("/api/chat", {
+        method:"POST",
         body: JSON.stringify({ model:"claude-sonnet-4-20250514", max_tokens:250, system:"Generate one sharp, thought-provoking question. Return ONLY the question.", messages:[{ role:"user", content:`Concept: "${rnd.title}" — ${rnd.insight}\nCategory: ${rnd.category}\n\nAsk one pointed question that challenges assumptions or demands deeper understanding.` }] })
       });
       const data = await res.json();
@@ -554,8 +554,8 @@ export default function ROrbit() {
     setLoadingRecs(true); setRecs(null);
     try {
       const summary = nodes.map(n => `${n.title} [${n.category}]: ${n.insight}`).join("\n");
-      const res = await fetch("https://api.anthropic.com/v1/messages", {
-        method:"POST", headers:{ "Content-Type":"application/json" },
+      const res = await fetch("/api/chat", {
+        method:"POST",
         body: JSON.stringify({ model:"claude-sonnet-4-20250514", max_tokens:1200, system:"You are a knowledge curator. Return ONLY valid JSON.", messages:[{ role:"user", content:`Based on this knowledge base, recommend resources that genuinely extend or challenge this thinking.\n\nNodes:\n${summary}\n\nReturn JSON:\n{"books":[{"title":"","author":"","reason":""}],"podcasts":[{"title":"","host":"","reason":""}],"videos":[{"title":"","creator":"","reason":""}]}\n\nExactly 3 per array. Be specific.` }] })
       });
       const data = await res.json();
