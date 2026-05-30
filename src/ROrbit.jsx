@@ -62,15 +62,11 @@ const toXYZ   = (theta, phi, r = R) => ({
 const SPIN_Q  = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), 0.0006);
 const easeOut = (t) => 1 - Math.pow(1 - t, 3);
 
-// Auto-detect: in Claude artifact sandbox window.storage exists → call Anthropic directly.
-// In standalone deployment window.storage is undefined → call through /api/chat proxy.
-const API_ENDPOINT = typeof window.storage?.get === 'function'
-  ? "https://api.anthropic.com/v1/messages"
-  : "/api/chat";
-
-// claude-sonnet-4-20250514 works in Claude's artifact sandbox.
-// claude-sonnet-4-6 is the correct public API model string.
-const MODEL = typeof window.storage?.get === 'function' ? "claude-sonnet-4-20250514" : "claude-sonnet-4-6";
+// Detect Claude artifact sandbox by checking for the actual storage API function.
+// Browser extensions sometimes define window.storage so we check for the specific .get function.
+const IS_ARTIFACT  = typeof window.storage?.get === "function";
+const API_ENDPOINT = IS_ARTIFACT ? "https://api.anthropic.com/v1/messages" : "/api/chat";
+const MODEL        = IS_ARTIFACT ? "claude-sonnet-4-20250514" : "claude-sonnet-4-6";
 
 export default function ROrbit() {
   const mountRef    = useRef(null);
@@ -115,13 +111,6 @@ export default function ROrbit() {
   const [recs,        setRecs]        = useState(null);
   const [loadingRecs, setLoadingRecs] = useState(false);
 
-  // Cloud Backup
-  const [githubToken, setGithubToken] = useState(() => localStorage.getItem("rorbit-gh-token") ?? "");
-  const [gistId,      setGistId]      = useState(() => localStorage.getItem("rorbit-gist-id")  ?? "");
-  const [backingUp,   setBackingUp]   = useState(false);
-  const [backupMsg,   setBackupMsg]   = useState("");
-  const [showBackup,  setShowBackup]  = useState(false);
-
   // Inline ref sync
   selectedRef.current       = selected;
   reviewNodeRef.current     = reviewNode;
@@ -136,12 +125,25 @@ export default function ROrbit() {
   useEffect(() => { nodesRef.current = nodes; }, [nodes]);
 
   // Load storage + check first-run
+  // Uses localStorage in standalone deployment, window.storage in Claude artifact sandbox
   useEffect(() => {
     try {
-      const nr = localStorage.getItem(KEY);
-      const ir = localStorage.getItem("rorbit-intro-seen");
-      if (nr) setNodes(JSON.parse(nr));
-      if (!ir) setShowIntro(true);
+      if (IS_ARTIFACT) {
+        (async () => {
+          try {
+            const [nr, ir] = await Promise.all([
+              window.storage.get(KEY),
+              window.storage.get("rorbit-intro-seen"),
+            ]);
+            if (nr) setNodes(JSON.parse(nr.value));
+            if (!ir) setShowIntro(true);
+          } catch { setShowIntro(true); }
+        })();
+      } else {
+        const saved = localStorage.getItem(KEY);
+        if (saved) setNodes(JSON.parse(saved));
+        if (!localStorage.getItem("rorbit-intro-seen")) setShowIntro(true);
+      }
     } catch { setShowIntro(true); }
   }, []);
 
@@ -184,13 +186,19 @@ export default function ROrbit() {
   // Collapse mobile card when selection changes
   useEffect(() => { setMobileCardExpanded(false); }, [selected]);
 
-  const persist = useCallback(async (n) => {
-    try { await window.storage.set(KEY, JSON.stringify(n)); } catch {}
+  const persist = useCallback((n) => {
+    try {
+      if (IS_ARTIFACT) window.storage.set(KEY, JSON.stringify(n));
+      else localStorage.setItem(KEY, JSON.stringify(n));
+    } catch {}
   }, []);
 
-  const dismissIntro = async () => {
+  const dismissIntro = () => {
     setShowIntro(false);
-    try { await window.storage.set("rorbit-intro-seen", "1"); } catch {}
+    try {
+      if (IS_ARTIFACT) window.storage.set("rorbit-intro-seen", "1");
+      else localStorage.setItem("rorbit-intro-seen", "1");
+    } catch {}
   };
 
   const exportJSON = () => {
@@ -620,56 +628,6 @@ export default function ROrbit() {
     setLoadingRecs(false);
   };
 
-  // ── Cloud Backup ──────────────────────────────────────────────────────────
-  const saveGithubToken = (v) => { setGithubToken(v); localStorage.setItem("rorbit-gh-token", v); };
-  const saveGistId      = (v) => { setGistId(v);      localStorage.setItem("rorbit-gist-id",  v); };
-
-  const backupToGist = async () => {
-    if (!githubToken.trim() || backingUp) return;
-    setBackingUp(true); setBackupMsg("");
-    const isNew = !gistId;
-    try {
-      const payload = {
-        description: "Rorbit knowledge sphere backup",
-        public: false,
-        files: { "rorbit-nodes.json": { content: JSON.stringify(nodes, null, 2) } },
-      };
-      const url = gistId
-        ? `https://api.github.com/gists/${gistId}`
-        : "https://api.github.com/gists";
-      const res = await fetch(url, {
-        method: gistId ? "PATCH" : "POST",
-        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${githubToken.trim()}` },
-        body: JSON.stringify(payload),
-      });
-      if (!res.ok) throw new Error(`GitHub ${res.status}`);
-      const data = await res.json();
-      saveGistId(data.id);
-      setBackupMsg(isNew
-        ? `✓ Backed up ${nodes.length} nodes — Gist ID: ${data.id}`
-        : `✓ Backed up ${nodes.length} nodes`);
-    } catch (e) { setBackupMsg(`✗ ${e.message}`); }
-    setBackingUp(false);
-  };
-
-  const restoreFromGist = async () => {
-    if (!githubToken.trim() || !gistId || backingUp) return;
-    setBackingUp(true); setBackupMsg("");
-    try {
-      const res = await fetch(`https://api.github.com/gists/${gistId}`, {
-        headers: { "Authorization": `Bearer ${githubToken.trim()}` },
-      });
-      if (!res.ok) throw new Error(`GitHub ${res.status}`);
-      const data = await res.json();
-      const content = data.files?.["rorbit-nodes.json"]?.content;
-      if (!content) throw new Error("No rorbit-nodes.json in gist");
-      const restored = JSON.parse(content);
-      setNodes(restored); persist(restored);
-      setBackupMsg(`✓ Restored ${restored.length} nodes`);
-    } catch (e) { setBackupMsg(`✗ ${e.message}`); }
-    setBackingUp(false);
-  };
-
   // ── Style helpers ─────────────────────────────────────────────────────────
   const taBase    = { width:"100%", background:T.inputBg, border:`1px solid ${T.inputBorder}`, borderRadius:"6px", color:T.text, padding:"10px 12px", fontSize:"13px", fontFamily:sans, lineHeight:1.65, outline:"none", boxSizing:"border-box" };
   const ta        = { ...taBase, resize:"vertical" };
@@ -993,6 +951,31 @@ export default function ROrbit() {
 
                 {!nodes.length && <div style={{ fontSize:"12px", color:T.textDim, marginBottom:"16px" }}>Empty. Start capturing thoughts.</div>}
 
+                {/* Always show restore option so you can recover from backup even when empty */}
+                {!nodes.length && (
+                  <div style={{ display:"flex", flexDirection:"column", gap:"10px", marginBottom:"16px" }}>
+                    <div style={{ background:T.nodeBg, border:`1px solid ${T.border}`, borderRadius:"8px", padding:"14px" }}>
+                      <div style={{ fontFamily:mono, fontSize:"9px", color:T.accent, letterSpacing:"2px", marginBottom:"8px" }}>RESTORE FROM BACKUP</div>
+                      <div style={{ fontSize:"12px", color:T.textMuted, lineHeight:1.7, marginBottom:"10px" }}>Have a GitHub Gist backup? Enter your token and Gist ID to restore your nodes.</div>
+                      <div style={{ display:"flex", flexDirection:"column", gap:"8px" }}>
+                        <div>
+                          <div style={lbl}>GITHUB TOKEN</div>
+                          <input type="password" value={githubToken} onChange={e => saveGithubToken(e.target.value)} placeholder="ghp_xxxxxxxxxxxx" style={{ ...inp, fontSize:"12px" }} />
+                        </div>
+                        <div>
+                          <div style={lbl}>GIST ID</div>
+                          <input value={gistId} onChange={e => saveGistId(e.target.value)} placeholder="Paste your Gist ID here" style={{ ...inp, fontSize:"12px" }} />
+                        </div>
+                        <button onClick={restoreFromGist} disabled={backingUp || !githubToken.trim() || !gistId}
+                          style={aBtn(!!githubToken.trim() && !!gistId && !backingUp, T.accentG)}>
+                          {backingUp ? "RESTORING..." : "↓ RESTORE MY NODES"}
+                        </button>
+                        {backupMsg && <div style={{ fontSize:"11px", color: backupMsg.startsWith("✓") ? T.accentG : "#f87171", fontFamily:mono }}>{backupMsg}</div>}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 <div style={{ display:"flex", flexDirection:"column", gap:"6px" }}>
                   {filteredNodes.reverse().map(n => {
                     const c = getcat(n.category);
@@ -1049,49 +1032,6 @@ export default function ROrbit() {
                     )}
                   </div>
                 )}
-
-                {/* Cloud Backup section */}
-                {dividerEl}
-                <div style={{ display:"flex", flexDirection:"column", gap:"10px" }}>
-                  <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between" }}>
-                    <div style={lbl}>CLOUD BACKUP</div>
-                    <button onClick={() => setShowBackup(b => !b)}
-                      style={{ background:"none", border:`1px solid ${T.border}`, borderRadius:"4px", fontFamily:mono, fontSize:"8px", color:T.textDim, cursor:"pointer", padding:"3px 8px", letterSpacing:"1px" }}>
-                      {showBackup ? "HIDE" : "SETUP"}
-                    </button>
-                  </div>
-                  {showBackup && (
-                    <div style={{ display:"flex", flexDirection:"column", gap:"8px" }}>
-                      <div>
-                        <div style={lbl}>GITHUB TOKEN</div>
-                        <input type="password" value={githubToken} onChange={e => saveGithubToken(e.target.value)}
-                          placeholder="ghp_xxxxxxxxxxxx"
-                          style={{ ...inp, fontSize:"12px" }} />
-                      </div>
-                      <div>
-                        <div style={lbl}>GIST ID</div>
-                        <input value={gistId} onChange={e => saveGistId(e.target.value)}
-                          placeholder="Leave blank to create new"
-                          style={{ ...inp, fontSize:"12px" }} />
-                      </div>
-                      <div style={{ display:"flex", gap:"8px" }}>
-                        <button onClick={backupToGist} disabled={backingUp || !githubToken.trim() || !nodes.length}
-                          style={{ ...aBtn(!!githubToken.trim() && !backingUp && nodes.length > 0, T.accent), flex:1, fontSize:"9px" }}>
-                          {backingUp ? "SAVING..." : "↑ BACKUP"}
-                        </button>
-                        <button onClick={restoreFromGist} disabled={backingUp || !githubToken.trim() || !gistId}
-                          style={{ ...aBtn(!!githubToken.trim() && !!gistId && !backingUp, T.accentG), flex:1, fontSize:"9px" }}>
-                          {backingUp ? "LOADING..." : "↓ RESTORE"}
-                        </button>
-                      </div>
-                      {backupMsg && (
-                        <div style={{ fontSize:"11px", color: backupMsg.startsWith("✓") ? T.accentG : "#f87171", fontFamily:mono }}>
-                          {backupMsg}
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
               </div>
             )}
           </div>
