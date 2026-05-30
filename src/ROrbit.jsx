@@ -273,7 +273,9 @@ export default function ROrbit() {
     if (!window.confirm("Replace current nodes with backup?")) return;
     setBackingUp(true); setBackupMsg("Restoring...");
     try {
-      const res  = await fetch(`https://api.github.com/gists/${gistId}`, { headers:{ "Authorization":`token ${githubToken.trim()}` } });
+      const res  = await fetch(`https://api.github.com/gists/${gistId}?_=${Date.now()}`, {
+        headers:{ "Authorization":`token ${githubToken.trim()}`, "Cache-Control":"no-cache" }
+      });
       if (!res.ok) throw new Error(res.status);
       const data = await res.json();
       const txt  = data.files["rorbit-nodes.json"]?.content;
