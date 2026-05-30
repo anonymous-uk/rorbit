@@ -627,6 +627,7 @@ export default function ROrbit() {
   const backupToGist = async () => {
     if (!githubToken.trim() || backingUp) return;
     setBackingUp(true); setBackupMsg("");
+    const isNew = !gistId;
     try {
       const payload = {
         description: "Rorbit knowledge sphere backup",
@@ -644,7 +645,9 @@ export default function ROrbit() {
       if (!res.ok) throw new Error(`GitHub ${res.status}`);
       const data = await res.json();
       saveGistId(data.id);
-      setBackupMsg(`✓ Backed up ${nodes.length} nodes`);
+      setBackupMsg(isNew
+        ? `✓ Backed up ${nodes.length} nodes — Gist ID: ${data.id}`
+        : `✓ Backed up ${nodes.length} nodes`);
     } catch (e) { setBackupMsg(`✗ ${e.message}`); }
     setBackingUp(false);
   };
@@ -989,31 +992,6 @@ export default function ROrbit() {
                 )}
 
                 {!nodes.length && <div style={{ fontSize:"12px", color:T.textDim, marginBottom:"16px" }}>Empty. Start capturing thoughts.</div>}
-
-                {/* Always show restore option so you can recover from backup even when empty */}
-                {!nodes.length && (
-                  <div style={{ display:"flex", flexDirection:"column", gap:"10px", marginBottom:"16px" }}>
-                    <div style={{ background:T.nodeBg, border:`1px solid ${T.border}`, borderRadius:"8px", padding:"14px" }}>
-                      <div style={{ fontFamily:mono, fontSize:"9px", color:T.accent, letterSpacing:"2px", marginBottom:"8px" }}>RESTORE FROM BACKUP</div>
-                      <div style={{ fontSize:"12px", color:T.textMuted, lineHeight:1.7, marginBottom:"10px" }}>Have a GitHub Gist backup? Enter your token and Gist ID to restore your nodes.</div>
-                      <div style={{ display:"flex", flexDirection:"column", gap:"8px" }}>
-                        <div>
-                          <div style={lbl}>GITHUB TOKEN</div>
-                          <input type="password" value={githubToken} onChange={e => saveGithubToken(e.target.value)} placeholder="ghp_xxxxxxxxxxxx" style={{ ...inp, fontSize:"12px" }} />
-                        </div>
-                        <div>
-                          <div style={lbl}>GIST ID</div>
-                          <input value={gistId} onChange={e => saveGistId(e.target.value)} placeholder="Paste your Gist ID here" style={{ ...inp, fontSize:"12px" }} />
-                        </div>
-                        <button onClick={restoreFromGist} disabled={backingUp || !githubToken.trim() || !gistId}
-                          style={aBtn(!!githubToken.trim() && !!gistId && !backingUp, T.accentG)}>
-                          {backingUp ? "RESTORING..." : "↓ RESTORE MY NODES"}
-                        </button>
-                        {backupMsg && <div style={{ fontSize:"11px", color: backupMsg.startsWith("✓") ? T.accentG : "#f87171", fontFamily:mono }}>{backupMsg}</div>}
-                      </div>
-                    </div>
-                  </div>
-                )}
 
                 <div style={{ display:"flex", flexDirection:"column", gap:"6px" }}>
                   {filteredNodes.reverse().map(n => {
