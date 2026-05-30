@@ -115,6 +115,13 @@ export default function ROrbit() {
   const [recs,        setRecs]        = useState(null);
   const [loadingRecs, setLoadingRecs] = useState(false);
 
+  // Cloud Backup
+  const [githubToken, setGithubToken] = useState(() => localStorage.getItem("rorbit-gh-token") ?? "");
+  const [gistId,      setGistId]      = useState(() => localStorage.getItem("rorbit-gist-id")  ?? "");
+  const [backingUp,   setBackingUp]   = useState(false);
+  const [backupMsg,   setBackupMsg]   = useState("");
+  const [showBackup,  setShowBackup]  = useState(false);
+
   // Inline ref sync
   selectedRef.current       = selected;
   reviewNodeRef.current     = reviewNode;
@@ -617,6 +624,53 @@ export default function ROrbit() {
     setLoadingRecs(false);
   };
 
+  // ── Cloud Backup ──────────────────────────────────────────────────────────
+  const saveGithubToken = (v) => { setGithubToken(v); localStorage.setItem("rorbit-gh-token", v); };
+  const saveGistId      = (v) => { setGistId(v);      localStorage.setItem("rorbit-gist-id",  v); };
+
+  const backupToGist = async () => {
+    if (!githubToken.trim() || backingUp) return;
+    setBackingUp(true); setBackupMsg("");
+    try {
+      const payload = {
+        description: "Rorbit knowledge sphere backup",
+        public: false,
+        files: { "rorbit-nodes.json": { content: JSON.stringify(nodes, null, 2) } },
+      };
+      const url = gistId
+        ? `https://api.github.com/gists/${gistId}`
+        : "https://api.github.com/gists";
+      const res = await fetch(url, {
+        method: gistId ? "PATCH" : "POST",
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${githubToken.trim()}` },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) throw new Error(`GitHub ${res.status}`);
+      const data = await res.json();
+      saveGistId(data.id);
+      setBackupMsg(`✓ Backed up ${nodes.length} nodes`);
+    } catch (e) { setBackupMsg(`✗ ${e.message}`); }
+    setBackingUp(false);
+  };
+
+  const restoreFromGist = async () => {
+    if (!githubToken.trim() || !gistId || backingUp) return;
+    setBackingUp(true); setBackupMsg("");
+    try {
+      const res = await fetch(`https://api.github.com/gists/${gistId}`, {
+        headers: { "Authorization": `Bearer ${githubToken.trim()}` },
+      });
+      if (!res.ok) throw new Error(`GitHub ${res.status}`);
+      const data = await res.json();
+      const content = data.files?.["rorbit-nodes.json"]?.content;
+      if (!content) throw new Error("No rorbit-nodes.json in gist");
+      const restored = JSON.parse(content);
+      setNodes(restored); persist(restored);
+      setBackupMsg(`✓ Restored ${restored.length} nodes`);
+    } catch (e) { setBackupMsg(`✗ ${e.message}`); }
+    setBackingUp(false);
+  };
+
   // ── Style helpers ─────────────────────────────────────────────────────────
   const taBase    = { width:"100%", background:T.inputBg, border:`1px solid ${T.inputBorder}`, borderRadius:"6px", color:T.text, padding:"10px 12px", fontSize:"13px", fontFamily:sans, lineHeight:1.65, outline:"none", boxSizing:"border-box" };
   const ta        = { ...taBase, resize:"vertical" };
@@ -1021,6 +1075,49 @@ export default function ROrbit() {
                     )}
                   </div>
                 )}
+
+                {/* Cloud Backup section */}
+                {dividerEl}
+                <div style={{ display:"flex", flexDirection:"column", gap:"10px" }}>
+                  <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between" }}>
+                    <div style={lbl}>CLOUD BACKUP</div>
+                    <button onClick={() => setShowBackup(b => !b)}
+                      style={{ background:"none", border:`1px solid ${T.border}`, borderRadius:"4px", fontFamily:mono, fontSize:"8px", color:T.textDim, cursor:"pointer", padding:"3px 8px", letterSpacing:"1px" }}>
+                      {showBackup ? "HIDE" : "SETUP"}
+                    </button>
+                  </div>
+                  {showBackup && (
+                    <div style={{ display:"flex", flexDirection:"column", gap:"8px" }}>
+                      <div>
+                        <div style={lbl}>GITHUB TOKEN</div>
+                        <input type="password" value={githubToken} onChange={e => saveGithubToken(e.target.value)}
+                          placeholder="ghp_xxxxxxxxxxxx"
+                          style={{ ...inp, fontSize:"12px" }} />
+                      </div>
+                      <div>
+                        <div style={lbl}>GIST ID</div>
+                        <input value={gistId} onChange={e => saveGistId(e.target.value)}
+                          placeholder="Leave blank to create new"
+                          style={{ ...inp, fontSize:"12px" }} />
+                      </div>
+                      <div style={{ display:"flex", gap:"8px" }}>
+                        <button onClick={backupToGist} disabled={backingUp || !githubToken.trim() || !nodes.length}
+                          style={{ ...aBtn(!!githubToken.trim() && !backingUp && nodes.length > 0, T.accent), flex:1, fontSize:"9px" }}>
+                          {backingUp ? "SAVING..." : "↑ BACKUP"}
+                        </button>
+                        <button onClick={restoreFromGist} disabled={backingUp || !githubToken.trim() || !gistId}
+                          style={{ ...aBtn(!!githubToken.trim() && !!gistId && !backingUp, T.accentG), flex:1, fontSize:"9px" }}>
+                          {backingUp ? "LOADING..." : "↓ RESTORE"}
+                        </button>
+                      </div>
+                      {backupMsg && (
+                        <div style={{ fontSize:"11px", color: backupMsg.startsWith("✓") ? T.accentG : "#f87171", fontFamily:mono }}>
+                          {backupMsg}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
               </div>
             )}
           </div>
