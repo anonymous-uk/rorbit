@@ -62,6 +62,12 @@ const toXYZ   = (theta, phi, r = R) => ({
 const SPIN_Q  = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), 0.0006);
 const easeOut = (t) => 1 - Math.pow(1 - t, 3);
 
+// Auto-detect: in Claude artifact sandbox window.storage exists → call Anthropic directly.
+// In standalone deployment window.storage is undefined → call through /api/chat proxy.
+const API_ENDPOINT = window.storage
+  ? "https://api.anthropic.com/v1/messages"
+  : "/api/chat";
+
 export default function ROrbit() {
   const mountRef    = useRef(null);
   const three       = useRef({});
@@ -467,7 +473,7 @@ export default function ROrbit() {
             : `For "example": lightly clarify for readability if needed, preserve the substance.`)
         : `For "example": return null.`;
 
-      const res = await fetch("/api/chat", {
+      const res = await fetch(API_ENDPOINT, {
         method:"POST", headers:{ "Content-Type":"application/json" },
         body: JSON.stringify({
           model:"claude-sonnet-4-20250514", max_tokens:800,
@@ -506,7 +512,7 @@ export default function ROrbit() {
     setQuerying(true); setSynthesis(""); setHighlighted([]);
     try {
       const ctx = nodes.map(n => `[${n.id}] ${n.title} — ${n.category} — ${n.insight}`).join("\n");
-      const res = await fetch("/api/chat", {
+      const res = await fetch(API_ENDPOINT, {
         method:"POST", headers:{ "Content-Type":"application/json" },
         body: JSON.stringify({
           model:"claude-sonnet-4-20250514", max_tokens:600,
@@ -542,7 +548,7 @@ export default function ROrbit() {
 
     setReviewNode(rnd); setSelected(rnd); setChallenge(""); setEditing(false); setChallenging(true);
     try {
-      const res = await fetch("/api/chat", {
+      const res = await fetch(API_ENDPOINT, {
         method:"POST", headers:{ "Content-Type":"application/json" },
         body: JSON.stringify({
           model:"claude-sonnet-4-20250514", max_tokens:250,
@@ -590,7 +596,7 @@ export default function ROrbit() {
     setLoadingRecs(true); setRecs(null);
     try {
       const summary = nodes.map(n => `${n.title} [${n.category}]: ${n.insight}`).join("\n");
-      const res = await fetch("/api/chat", {
+      const res = await fetch(API_ENDPOINT, {
         method:"POST", headers:{ "Content-Type":"application/json" },
         body: JSON.stringify({
           model:"claude-sonnet-4-20250514", max_tokens:1200,
@@ -929,6 +935,31 @@ export default function ROrbit() {
                 )}
 
                 {!nodes.length && <div style={{ fontSize:"12px", color:T.textDim, marginBottom:"16px" }}>Empty. Start capturing thoughts.</div>}
+
+                {/* Always show restore option so you can recover from backup even when empty */}
+                {!nodes.length && (
+                  <div style={{ display:"flex", flexDirection:"column", gap:"10px", marginBottom:"16px" }}>
+                    <div style={{ background:T.nodeBg, border:`1px solid ${T.border}`, borderRadius:"8px", padding:"14px" }}>
+                      <div style={{ fontFamily:mono, fontSize:"9px", color:T.accent, letterSpacing:"2px", marginBottom:"8px" }}>RESTORE FROM BACKUP</div>
+                      <div style={{ fontSize:"12px", color:T.textMuted, lineHeight:1.7, marginBottom:"10px" }}>Have a GitHub Gist backup? Enter your token and Gist ID to restore your nodes.</div>
+                      <div style={{ display:"flex", flexDirection:"column", gap:"8px" }}>
+                        <div>
+                          <div style={lbl}>GITHUB TOKEN</div>
+                          <input type="password" value={githubToken} onChange={e => saveGithubToken(e.target.value)} placeholder="ghp_xxxxxxxxxxxx" style={{ ...inp, fontSize:"12px" }} />
+                        </div>
+                        <div>
+                          <div style={lbl}>GIST ID</div>
+                          <input value={gistId} onChange={e => saveGistId(e.target.value)} placeholder="Paste your Gist ID here" style={{ ...inp, fontSize:"12px" }} />
+                        </div>
+                        <button onClick={restoreFromGist} disabled={backingUp || !githubToken.trim() || !gistId}
+                          style={aBtn(!!githubToken.trim() && !!gistId && !backingUp, T.accentG)}>
+                          {backingUp ? "RESTORING..." : "↓ RESTORE MY NODES"}
+                        </button>
+                        {backupMsg && <div style={{ fontSize:"11px", color: backupMsg.startsWith("✓") ? T.accentG : "#f87171", fontFamily:mono }}>{backupMsg}</div>}
+                      </div>
+                    </div>
+                  </div>
+                )}
 
                 <div style={{ display:"flex", flexDirection:"column", gap:"6px" }}>
                   {filteredNodes.reverse().map(n => {
