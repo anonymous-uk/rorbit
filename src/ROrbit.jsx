@@ -467,7 +467,7 @@ export default function ROrbit() {
             : `For "example": lightly clarify for readability if needed, preserve the substance.`)
         : `For "example": return null.`;
 
-      const res = await fetch("https://api.anthropic.com/v1/messages", {
+      const res = await fetch("/api/chat", {
         method:"POST", headers:{ "Content-Type":"application/json" },
         body: JSON.stringify({
           model:"claude-sonnet-4-20250514", max_tokens:800,
@@ -506,7 +506,7 @@ export default function ROrbit() {
     setQuerying(true); setSynthesis(""); setHighlighted([]);
     try {
       const ctx = nodes.map(n => `[${n.id}] ${n.title} — ${n.category} — ${n.insight}`).join("\n");
-      const res = await fetch("https://api.anthropic.com/v1/messages", {
+      const res = await fetch("/api/chat", {
         method:"POST", headers:{ "Content-Type":"application/json" },
         body: JSON.stringify({
           model:"claude-sonnet-4-20250514", max_tokens:600,
@@ -542,7 +542,7 @@ export default function ROrbit() {
 
     setReviewNode(rnd); setSelected(rnd); setChallenge(""); setEditing(false); setChallenging(true);
     try {
-      const res = await fetch("https://api.anthropic.com/v1/messages", {
+      const res = await fetch("/api/chat", {
         method:"POST", headers:{ "Content-Type":"application/json" },
         body: JSON.stringify({
           model:"claude-sonnet-4-20250514", max_tokens:250,
@@ -590,7 +590,7 @@ export default function ROrbit() {
     setLoadingRecs(true); setRecs(null);
     try {
       const summary = nodes.map(n => `${n.title} [${n.category}]: ${n.insight}`).join("\n");
-      const res = await fetch("https://api.anthropic.com/v1/messages", {
+      const res = await fetch("/api/chat", {
         method:"POST", headers:{ "Content-Type":"application/json" },
         body: JSON.stringify({
           model:"claude-sonnet-4-20250514", max_tokens:1200,
