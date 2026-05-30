@@ -68,6 +68,10 @@ const API_ENDPOINT = window.storage
   ? "https://api.anthropic.com/v1/messages"
   : "/api/chat";
 
+// claude-sonnet-4-20250514 works in Claude's artifact sandbox.
+// claude-sonnet-4-6 is the correct public API model string.
+const MODEL = window.storage ? "claude-sonnet-4-20250514" : "claude-sonnet-4-6";
+
 export default function ROrbit() {
   const mountRef    = useRef(null);
   const three       = useRef({});
@@ -476,7 +480,7 @@ export default function ROrbit() {
       const res = await fetch(API_ENDPOINT, {
         method:"POST", headers:{ "Content-Type":"application/json" },
         body: JSON.stringify({
-          model:"claude-sonnet-4-20250514", max_tokens:800,
+          model:MODEL, max_tokens:800,
           system:"Knowledge graph classifier. Return ONLY valid JSON. No markdown.",
           messages:[{ role:"user", content:
             `Thought: "${input}"${exampleNote}\nCategories: ${CATEGORIES.map(c => c.name).join(", ")}${existingCtx}\n\n${insightInstruction}\n${exampleInstruction}\n\nReturn JSON:\n{"title":"4-7 word title","insight":"see instruction above","example":null,"category":"exact category name","tags":["2-4 tags"],"connections":["nodeId — max 3, genuine only, else empty"]}`
@@ -515,7 +519,7 @@ export default function ROrbit() {
       const res = await fetch(API_ENDPOINT, {
         method:"POST", headers:{ "Content-Type":"application/json" },
         body: JSON.stringify({
-          model:"claude-sonnet-4-20250514", max_tokens:600,
+          model:MODEL, max_tokens:600,
           system:"Knowledge graph search. Return ONLY valid JSON.",
           messages:[{ role:"user", content:
             `Question: "${queryText}"\n\nNodes:\n${ctx}\n\nReturn JSON:\n{"relevant_ids":["up to 5 node IDs"],"synthesis":"2-3 sentence synthesis"}`
@@ -551,7 +555,7 @@ export default function ROrbit() {
       const res = await fetch(API_ENDPOINT, {
         method:"POST", headers:{ "Content-Type":"application/json" },
         body: JSON.stringify({
-          model:"claude-sonnet-4-20250514", max_tokens:250,
+          model:MODEL, max_tokens:250,
           system:"Generate one sharp, thought-provoking question. Return ONLY the question.",
           messages:[{ role:"user", content:
             `Concept: "${rnd.title}" — ${rnd.insight}\nCategory: ${rnd.category}\n\nAsk one pointed question that challenges assumptions or demands deeper understanding.`
@@ -599,7 +603,7 @@ export default function ROrbit() {
       const res = await fetch(API_ENDPOINT, {
         method:"POST", headers:{ "Content-Type":"application/json" },
         body: JSON.stringify({
-          model:"claude-sonnet-4-20250514", max_tokens:1200,
+          model:MODEL, max_tokens:1200,
           system:"You are a knowledge curator. Return ONLY valid JSON.",
           messages:[{ role:"user", content:
             `Based on this knowledge base, recommend resources that genuinely extend or challenge this thinking.\n\nNodes:\n${summary}\n\nReturn JSON:\n{"books":[{"title":"","author":"","reason":""}],"podcasts":[{"title":"","host":"","reason":""}],"videos":[{"title":"","creator":"","reason":""}]}\n\nExactly 3 per array. Be specific.`
