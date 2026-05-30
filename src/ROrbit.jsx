@@ -64,12 +64,46 @@ const toXYZ   = (theta, phi, r = R) => ({
 });
 const SPIN_Q  = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), 0.0006);
 const easeOut = (t) => 1 - Math.pow(1 - t, 3);
+// Reusable instances — avoids allocating new objects on every mouse/touch event
+const _euler = new THREE.Euler();
+const _quat  = new THREE.Quaternion();
 
 // Detect Claude artifact sandbox by checking for the actual storage API function.
 // Browser extensions sometimes define window.storage so we check for the specific .get function.
 const IS_ARTIFACT  = typeof window.storage?.get === "function";
 const API_ENDPOINT = IS_ARTIFACT ? "https://api.anthropic.com/v1/messages" : "/api/chat";
 const MODEL        = IS_ARTIFACT ? "claude-sonnet-4-20250514" : "claude-sonnet-4-6";
+
+// ── Sub-components defined outside ROrbit to avoid remounting on every render ─
+function ExampleBlock({ nodeObj, T, mono, isLight }) {
+  if (!nodeObj?.example) return null;
+  return (
+    <div style={{ marginTop:"10px", padding:"9px 11px", background: isLight ? "#e8f4ff" : "#071e35", border:`1px solid ${isLight ? "#b0c8da" : "#1a3a55"}`, borderRadius:"6px" }}>
+      <div style={{ fontFamily:mono, fontSize:"8px", color:T.textDim, letterSpacing:"2px", marginBottom:"5px" }}>EXAMPLE</div>
+      <div style={{ fontSize:"12px", color:T.textMuted, lineHeight:1.75, fontStyle:"italic" }}>{nodeObj.example}</div>
+    </div>
+  );
+}
+
+function ConnectedNodes({ nodeObj, nodes, T, mono }) {
+  if (!nodeObj?.connections?.length) return null;
+  const connected = nodeObj.connections.map(id => nodes.find(n => n.id === id)).filter(Boolean);
+  if (!connected.length) return null;
+  return (
+    <div style={{ marginTop:"10px" }}>
+      <div style={{ fontFamily:mono, fontSize:"8px", color:T.textDim, letterSpacing:"2px", marginBottom:"6px" }}>CONNECTED TO</div>
+      {connected.map(cn => {
+        const cc = getcat(cn.category);
+        return (
+          <div key={cn.id} style={{ display:"flex", alignItems:"center", gap:"6px", marginBottom:"4px" }}>
+            <div style={{ width:"4px", height:"4px", borderRadius:"50%", background:cc.color, flexShrink:0 }} />
+            <span style={{ fontSize:"11px", color:T.textMuted }}>{cn.title}</span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
 
 export default function ROrbit() {
   const mountRef    = useRef(null);
@@ -132,9 +166,12 @@ export default function ROrbit() {
   const mono  = "'DM Mono','Courier New',monospace";
   const orbit = "'Orbitron','DM Mono',monospace";
 
-  useEffect(() => { nodesRef.current = nodes; }, [nodes]);
-
-  // Load storage + check first-run
+  // Inline ref sync — always current before any effect or callback runs
+  selectedRef.current       = selected;
+  reviewNodeRef.current     = reviewNode;
+  highlightedRef.current    = highlighted;
+  activeCategoryRef.current = activeCategory;
+  nodesRef.current          = nodes;
   // Uses localStorage in standalone deployment, window.storage in Claude artifact sandbox
   useEffect(() => {
     try {
@@ -152,7 +189,7 @@ export default function ROrbit() {
       } else {
         const saved = localStorage.getItem(KEY);
         if (saved) setNodes(JSON.parse(saved));
-        if (!localStorage.getItem("rorbit-intro-seen")) setShowIntro(true);
+        if (!localStorage.getItem(INTRO)) setShowIntro(true);
       }
     } catch { setShowIntro(true); }
   }, []);
@@ -206,8 +243,8 @@ export default function ROrbit() {
   const dismissIntro = () => {
     setShowIntro(false);
     try {
-      if (IS_ARTIFACT) window.storage.set("rorbit-intro-seen", "1");
-      else localStorage.setItem("rorbit-intro-seen", "1");
+      if (IS_ARTIFACT) window.storage.set(INTRO, "1");
+      else localStorage.setItem(INTRO, "1");
     } catch {}
   };
 
@@ -248,7 +285,6 @@ export default function ROrbit() {
     } catch (e) { setBackupMsg(`Failed (${e.message}). Check token + Gist ID.`); }
     setBackingUp(false); setTimeout(() => setBackupMsg(""), 5000);
   };
-
 
   const exportJSON = () => {
     const blob = new Blob([JSON.stringify(nodes, null, 2)], { type:"application/json" });
@@ -326,9 +362,8 @@ export default function ROrbit() {
     const onMD = (e) => { dragging = true; autoSpin = false; mdPos = prev = { x:e.clientX, y:e.clientY }; };
     const onMM = (e) => {
       if (!dragging) return;
-      group.quaternion.premultiply(new THREE.Quaternion().setFromEuler(
-        new THREE.Euler((e.clientY - prev.y) * 0.004, (e.clientX - prev.x) * 0.004, 0)
-      ));
+      _euler.set((e.clientY - prev.y) * 0.004, (e.clientX - prev.x) * 0.004, 0);
+      group.quaternion.premultiply(_quat.setFromEuler(_euler));
       prev = { x:e.clientX, y:e.clientY };
     };
     const onMU = () => { dragging = false; resumeSpin(); };
@@ -363,9 +398,8 @@ export default function ROrbit() {
       }
       lastPinchDist = null;
       if (!dragging) return;
-      group.quaternion.premultiply(new THREE.Quaternion().setFromEuler(
-        new THREE.Euler((e.touches[0].clientY - prev.y) * 0.004, (e.touches[0].clientX - prev.x) * 0.004, 0)
-      ));
+      _euler.set((e.touches[0].clientY - prev.y) * 0.004, (e.touches[0].clientX - prev.x) * 0.004, 0);
+      group.quaternion.premultiply(_quat.setFromEuler(_euler));
       prev = { x:e.touches[0].clientX, y:e.touches[0].clientY }; e.preventDefault();
     };
     const onTE = () => { dragging = false; lastPinchDist = null; resumeSpin(); };
@@ -566,7 +600,7 @@ export default function ROrbit() {
       const next = [...nodes, node];
       setNodes(next); persist(next); setInput(""); setExampleInput("");
       setLastAdded({ title:node.title, category:node.category });
-    } catch { /* silent fail */ }
+    } catch { setLastAdded({ title:"Error — try again", category:"Thinking Frameworks" }); }
     setAdding(false);
   };
 
@@ -688,37 +722,6 @@ export default function ROrbit() {
   const selCat = selected   ? getcat(selected.category)   : null;
   const rvCat  = reviewNode ? getcat(reviewNode.category) : null;
 
-  // Connected node titles — used in detail cards
-  const ExampleBlock = ({ nodeObj }) => {
-    if (!nodeObj?.example) return null;
-    return (
-      <div style={{ marginTop:"10px", padding:"9px 11px", background: isLight ? "#e8f4ff" : "#071e35", border:`1px solid ${isLight ? "#b0c8da" : "#1a3a55"}`, borderRadius:"6px" }}>
-        <div style={{ fontFamily:mono, fontSize:"8px", color:T.textDim, letterSpacing:"2px", marginBottom:"5px" }}>EXAMPLE</div>
-        <div style={{ fontSize:"12px", color:T.textMuted, lineHeight:1.75, fontStyle:"italic" }}>{nodeObj.example}</div>
-      </div>
-    );
-  };
-
-  const ConnectedNodes = ({ nodeObj }) => {
-    if (!nodeObj?.connections?.length) return null;
-    const connected = nodeObj.connections.map(id => nodes.find(n => n.id === id)).filter(Boolean);
-    if (!connected.length) return null;
-    return (
-      <div style={{ marginTop:"10px" }}>
-        <div style={{ fontFamily:mono, fontSize:"8px", color:T.textDim, letterSpacing:"2px", marginBottom:"6px" }}>CONNECTED TO</div>
-        {connected.map(cn => {
-          const cc = getcat(cn.category);
-          return (
-            <div key={cn.id} style={{ display:"flex", alignItems:"center", gap:"6px", marginBottom:"4px" }}>
-              <div style={{ width:"4px", height:"4px", borderRadius:"50%", background:cc.color, flexShrink:0 }} />
-              <span style={{ fontSize:"11px", color:T.textMuted }}>{cn.title}</span>
-            </div>
-          );
-        })}
-      </div>
-    );
-  };
-
   const filteredNodes = nodes.filter(n =>
     !nodeSearch.trim() ||
     n.title.toLowerCase().includes(nodeSearch.toLowerCase()) ||
@@ -786,8 +789,8 @@ export default function ROrbit() {
               <div style={{ fontFamily:mono, fontSize:"8px", color:selCat.color, letterSpacing:"2.5px", marginBottom:"6px" }}>{selected.category.toUpperCase()}</div>
               <div style={{ fontSize:"13px", fontWeight:500, color:T.text, marginBottom:"7px", lineHeight:1.4 }}>{selected.title}</div>
               <div style={{ fontSize:"12px", color:T.textMuted, lineHeight:1.75 }}>{selected.insight}</div>
-              <ExampleBlock nodeObj={selected} />
-              <ConnectedNodes nodeObj={selected} />
+              <ExampleBlock nodeObj={selected} T={T} mono={mono} isLight={isLight} />
+              <ConnectedNodes nodeObj={selected} nodes={nodes} T={T} mono={mono} />
               {selected.tags?.length > 0 && (
                 <div style={{ display:"flex", gap:"5px", flexWrap:"wrap", marginTop:"10px" }}>
                   {selected.tags.map(t => <span key={t} style={{ fontFamily:mono, fontSize:"9px", background:T.tagBg, border:`1px solid ${T.tagBorder}`, padding:"2px 8px", borderRadius:"20px", color:T.tagText }}>#{t}</span>)}
@@ -811,8 +814,8 @@ export default function ROrbit() {
                 <div style={{ marginTop:"10px" }}>
                   <div style={{ fontFamily:mono, fontSize:"8px", color:selCat.color, letterSpacing:"2px", marginBottom:"6px" }}>{selected.category.toUpperCase()}</div>
                   <div style={{ fontSize:"12px", color:T.textMuted, lineHeight:1.75 }}>{selected.insight}</div>
-                  <ExampleBlock nodeObj={selected} />
-                  <ConnectedNodes nodeObj={selected} />
+                  <ExampleBlock nodeObj={selected} T={T} mono={mono} isLight={isLight} />
+                  <ConnectedNodes nodeObj={selected} nodes={nodes} T={T} mono={mono} />
                   {selected.tags?.length > 0 && (
                     <div style={{ display:"flex", gap:"4px", flexWrap:"wrap", marginTop:"8px" }}>
                       {selected.tags.map(t => <span key={t} style={{ fontFamily:mono, fontSize:"9px", background:T.tagBg, border:`1px solid ${T.tagBorder}`, padding:"2px 7px", borderRadius:"20px", color:T.tagText }}>#{t}</span>)}
@@ -928,8 +931,8 @@ export default function ROrbit() {
                       <div style={{ fontFamily:mono, fontSize:"8px", color:rvCat.color, letterSpacing:"2px", marginBottom:"6px" }}>{reviewNode.category.toUpperCase()}</div>
                       <div style={{ fontSize:"13px", fontWeight:500, color:T.text, marginBottom:"6px", lineHeight:1.4 }}>{reviewNode.title}</div>
                       <div style={{ fontSize:"12px", color:T.textMuted, lineHeight:1.75 }}>{reviewNode.insight}</div>
-                      <ExampleBlock nodeObj={reviewNode} />
-                      <ConnectedNodes nodeObj={reviewNode} />
+                      <ExampleBlock nodeObj={reviewNode} T={T} mono={mono} isLight={isLight} />
+                      <ConnectedNodes nodeObj={reviewNode} nodes={nodes} T={T} mono={mono} />
                       {reviewNode.tags?.length > 0 && (
                         <div style={{ display:"flex", gap:"4px", flexWrap:"wrap", marginTop:"8px" }}>
                           {reviewNode.tags.map(t => <span key={t} style={{ fontFamily:mono, fontSize:"9px", background:T.tagBg, border:`1px solid ${T.tagBorder}`, padding:"2px 7px", borderRadius:"20px", color:T.tagText }}>#{t}</span>)}
@@ -1001,7 +1004,7 @@ export default function ROrbit() {
                 {!nodes.length && <div style={{ fontSize:"12px", color:T.textDim, marginBottom:"16px" }}>Empty. Start capturing thoughts.</div>}
 
                 <div style={{ display:"flex", flexDirection:"column", gap:"6px" }}>
-                  {filteredNodes.reverse().map(n => {
+                  {[...filteredNodes].reverse().map(n => {
                     const c = getcat(n.category);
                     return (
                       <div key={n.id} onClick={() => setSelected(p => p?.id===n.id ? null : n)}
