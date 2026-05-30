@@ -1,4 +1,4 @@
-const CACHE = 'rorbit-v1';
+const CACHE = 'rorbit-v2';
 
 self.addEventListener('install', (e) => {
   e.waitUntil(
