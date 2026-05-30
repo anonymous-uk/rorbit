@@ -250,6 +250,7 @@ export default function ROrbit() {
   };
 
 
+  const exportJSON = () => {
     const blob = new Blob([JSON.stringify(nodes, null, 2)], { type:"application/json" });
     const url  = URL.createObjectURL(blob);
     const a    = document.createElement("a");
