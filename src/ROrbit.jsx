@@ -64,13 +64,13 @@ const easeOut = (t) => 1 - Math.pow(1 - t, 3);
 
 // Auto-detect: in Claude artifact sandbox window.storage exists → call Anthropic directly.
 // In standalone deployment window.storage is undefined → call through /api/chat proxy.
-const API_ENDPOINT = window.storage
+const API_ENDPOINT = typeof window.storage?.get === 'function'
   ? "https://api.anthropic.com/v1/messages"
   : "/api/chat";
 
 // claude-sonnet-4-20250514 works in Claude's artifact sandbox.
 // claude-sonnet-4-6 is the correct public API model string.
-const MODEL = window.storage ? "claude-sonnet-4-20250514" : "claude-sonnet-4-6";
+const MODEL = typeof window.storage?.get === 'function' ? "claude-sonnet-4-20250514" : "claude-sonnet-4-6";
 
 export default function ROrbit() {
   const mountRef    = useRef(null);
@@ -137,16 +137,12 @@ export default function ROrbit() {
 
   // Load storage + check first-run
   useEffect(() => {
-    (async () => {
-      try {
-        const [nr, ir] = await Promise.all([
-          window.storage.get(KEY),
-          window.storage.get("rorbit-intro-seen"),
-        ]);
-        if (nr) setNodes(JSON.parse(nr.value));
-        if (!ir) setShowIntro(true);
-      } catch { setShowIntro(true); }
-    })();
+    try {
+      const nr = localStorage.getItem(KEY);
+      const ir = localStorage.getItem("rorbit-intro-seen");
+      if (nr) setNodes(JSON.parse(nr));
+      if (!ir) setShowIntro(true);
+    } catch { setShowIntro(true); }
   }, []);
 
   // Fonts
