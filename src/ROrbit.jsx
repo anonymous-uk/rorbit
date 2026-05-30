@@ -12,23 +12,23 @@ const CATEGORIES = [
   { name: "Risk",                  color: "#f472b6" },
 ];
 
+// Ghost node positions — shown when sphere is empty so it never looks barren
 const GHOST_POSITIONS = [
-  { theta:0.3, phi:0.8 }, { theta:1.8, phi:1.1 }, { theta:3.5, phi:0.6 },
-  { theta:2.2, phi:2.1 }, { theta:4.8, phi:1.4 }, { theta:1.1, phi:2.5 },
-  { theta:5.5, phi:1.8 }, { theta:3.9, phi:0.9 }, { theta:0.8, phi:1.6 },
-  { theta:2.9, phi:0.4 },
+  { theta:0.3,  phi:0.8 }, { theta:1.8, phi:1.1 }, { theta:3.5, phi:0.6 },
+  { theta:2.2,  phi:2.1 }, { theta:4.8, phi:1.4 }, { theta:1.1, phi:2.5 },
+  { theta:5.5,  phi:1.8 }, { theta:3.9, phi:0.9 }, { theta:0.8, phi:1.6 },
+  { theta:2.9,  phi:0.4 },
 ];
 
-const R        = 2.4;
-const KEY      = "rorbit-v1";
-const GH_TOKEN = "rorbit-gh-token";
-const GH_GIST  = "rorbit-gist-id";
-const INTRO    = "rorbit-intro-seen";
+const R   = 2.4;
+const KEY = "rorbit-v1";
 
 const DARK = {
   appBg:"#010306", panelBg:"#071e35", border:"#1a3a55",
   inputBg:"#082030", inputBorder:"#204a6a",
-  text:"#ffffff", textMuted:"#d8eef8", textDim:"#8abcd8",
+  text:"#ffffff",           // pure white — no ambiguity
+  textMuted:"#d8eef8",      // bright, clearly readable secondary
+  textDim:"#8abcd8",        // visible tertiary labels
   accent:"#00f2ea", accentG:"#34d399",
   nodeBg:"#0a2540", legendText:"#d8eef8",
   tagBg:"#0a2540", tagBorder:"#204a6a", tagText:"#8abcd8",
@@ -40,7 +40,9 @@ const DARK = {
 const LIGHT = {
   appBg:"#edf2f7", panelBg:"#ffffff", border:"#b0c8da",
   inputBg:"#f4f8fb", inputBorder:"#88aac0",
-  text:"#080f18", textMuted:"#1a3448", textDim:"#3a6278",
+  text:"#080f18",           // near-black, maximum contrast on white
+  textMuted:"#1a3448",      // dark blue-grey, unambiguously readable
+  textDim:"#3a6278",        // clear tertiary
   accent:"#0891b2", accentG:"#059669",
   nodeBg:"#e8f0f8", legendText:"#1a3448",
   tagBg:"#e8f0f8", tagBorder:"#a0c0d0", tagText:"#3a6278",
@@ -50,7 +52,7 @@ const LIGHT = {
   divider:"#b0c8da", searchBg:"#f4f8fb",
 };
 
-const getcat  = (n) => CATEGORIES.find(c => c.name === n) ?? CATEGORIES[0];
+const getcat  = (name) => CATEGORIES.find(c => c.name === name) ?? CATEGORIES[0];
 const rndpos  = () => ({ theta: Math.random() * Math.PI * 2, phi: Math.acos(2 * Math.random() - 1) });
 const toXYZ   = (theta, phi, r = R) => ({
   x: r * Math.sin(phi) * Math.cos(theta),
@@ -61,31 +63,33 @@ const SPIN_Q  = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 
 const easeOut = (t) => 1 - Math.pow(1 - t, 3);
 
 export default function ROrbit() {
-  const mountRef     = useRef(null);
-  const three        = useRef({});
-  const nodesRef     = useRef([]);
-  const newNodeAnim  = useRef(null);
+  const mountRef    = useRef(null);
+  const three       = useRef({});
+  const nodesRef    = useRef([]);
+  const newNodeAnim = useRef(null);
 
   const selectedRef       = useRef(null);
   const reviewNodeRef     = useRef(null);
   const highlightedRef    = useRef([]);
   const activeCategoryRef = useRef(null);
 
-  const [nodes,              setNodes]              = useState([]);
-  const [input,              setInput]              = useState("");
-  const [adding,             setAdding]             = useState(false);
-  const [lastAdded,          setLastAdded]          = useState(null);
-  const [selected,           setSelected]           = useState(null);
+  const [nodes,            setNodes]            = useState([]);
+  const [input,            setInput]            = useState("");
+  const [exampleInput,     setExampleInput]     = useState("");
+  const [addMode,          setAddMode]          = useState("enhance"); // 'enhance' | 'keep'
+  const [adding,           setAdding]           = useState(false);
+  const [lastAdded,        setLastAdded]        = useState(null);
+  const [selected,         setSelected]         = useState(null);
   const [mobileCardExpanded, setMobileCardExpanded] = useState(false);
-  const [highlighted,        setHighlighted]        = useState([]);
-  const [isLight,            setIsLight]            = useState(false);
-  const [activeCategory,     setActiveCategory]     = useState(null);
-  const [hoveredCat,         setHoveredCat]         = useState(null);
-  const [showIntro,          setShowIntro]          = useState(false);
-  const [panel,              setPanel]              = useState("capture");
-  const [isMobile,           setIsMobile]           = useState(() => window.innerWidth < 700);
-  const [nodeSearch,         setNodeSearch]         = useState("");
-  const [sphereBrightness,   setSphereBrightness]   = useState(40);
+  const [highlighted,      setHighlighted]      = useState([]);
+  const [isLight,          setIsLight]          = useState(false);
+  const [activeCategory,   setActiveCategory]   = useState(null);
+  const [hoveredCat,       setHoveredCat]       = useState(null);
+  const [showIntro,        setShowIntro]        = useState(false);
+  const [panel,            setPanel]            = useState("capture");
+  const [isMobile,         setIsMobile]         = useState(() => window.innerWidth < 700);
+  const [nodeSearch,       setNodeSearch]       = useState("");
+  const [sphereBrightness, setSphereBrightness] = useState(40);
 
   // Explore — persisted across tab navigation
   const [queryText,   setQueryText]   = useState("");
@@ -101,13 +105,7 @@ export default function ROrbit() {
   const [recs,        setRecs]        = useState(null);
   const [loadingRecs, setLoadingRecs] = useState(false);
 
-  // GitHub Gist backup — token + gist id stored in localStorage
-  const [githubToken, setGithubTokenState] = useState(() => localStorage.getItem(GH_TOKEN) || "");
-  const [gistId,      setGistIdState]      = useState(() => localStorage.getItem(GH_GIST)  || "");
-  const [backingUp,   setBackingUp]        = useState(false);
-  const [backupMsg,   setBackupMsg]        = useState("");
-  const [showBackup,  setShowBackup]       = useState(false);
-
+  // Inline ref sync
   selectedRef.current       = selected;
   reviewNodeRef.current     = reviewNode;
   highlightedRef.current    = highlighted;
@@ -120,13 +118,18 @@ export default function ROrbit() {
 
   useEffect(() => { nodesRef.current = nodes; }, [nodes]);
 
-  // ── Load from localStorage (replaces window.storage) ─────────────────────
+  // Load storage + check first-run
   useEffect(() => {
-    try {
-      const saved = localStorage.getItem(KEY);
-      if (saved) setNodes(JSON.parse(saved));
-      if (!localStorage.getItem(INTRO)) setShowIntro(true);
-    } catch { setShowIntro(true); }
+    (async () => {
+      try {
+        const [nr, ir] = await Promise.all([
+          window.storage.get(KEY),
+          window.storage.get("rorbit-intro-seen"),
+        ]);
+        if (nr) setNodes(JSON.parse(nr.value));
+        if (!ir) setShowIntro(true);
+      } catch { setShowIntro(true); }
+    })();
   }, []);
 
   // Fonts
@@ -145,7 +148,7 @@ export default function ROrbit() {
     return () => window.removeEventListener("resize", fn);
   }, []);
 
-  // Sphere brightness
+  // Sphere background brightness — near-black → visible mid-grey
   useEffect(() => {
     const { renderer, starMat, wireMat } = three.current;
     if (!renderer) return;
@@ -153,24 +156,29 @@ export default function ROrbit() {
     const bg = new THREE.Color(0x010306);
     bg.lerp(new THREE.Color(0x505060), t);
     renderer.setClearColor(bg, 1);
-    if (starMat) { starMat.opacity = 0.35 + t * 0.45; starMat.size = 0.055 + t * 0.04; starMat.needsUpdate = true; }
-    if (wireMat) { wireMat.opacity = 0.12 + t * 0.28; wireMat.needsUpdate = true; }
+    if (starMat) {
+      starMat.opacity     = 0.35 + t * 0.45;
+      starMat.size        = 0.055 + t * 0.04;
+      starMat.needsUpdate = true;
+    }
+    // Wireframe lifts so it stays readable against brighter background
+    if (wireMat) {
+      wireMat.opacity     = 0.12 + t * 0.28;
+      wireMat.needsUpdate = true;
+    }
   }, [sphereBrightness]);
 
+  // Collapse mobile card when selection changes
   useEffect(() => { setMobileCardExpanded(false); }, [selected]);
 
-  // ── persist — synchronous localStorage write ──────────────────────────────
-  const persist = useCallback((n) => {
-    try { localStorage.setItem(KEY, JSON.stringify(n)); } catch {}
+  const persist = useCallback(async (n) => {
+    try { await window.storage.set(KEY, JSON.stringify(n)); } catch {}
   }, []);
 
-  const dismissIntro = () => {
+  const dismissIntro = async () => {
     setShowIntro(false);
-    try { localStorage.setItem(INTRO, "1"); } catch {}
+    try { await window.storage.set("rorbit-intro-seen", "1"); } catch {}
   };
-
-  const saveGithubToken = (t) => { setGithubTokenState(t); localStorage.setItem(GH_TOKEN, t); };
-  const saveGistId      = (id) => { setGistIdState(id);      localStorage.setItem(GH_GIST,  id); };
 
   const exportJSON = () => {
     const blob = new Blob([JSON.stringify(nodes, null, 2)], { type:"application/json" });
@@ -180,51 +188,7 @@ export default function ROrbit() {
     URL.revokeObjectURL(url);
   };
 
-  // ── GitHub Gist backup ────────────────────────────────────────────────────
-  const backupToGist = async () => {
-    if (!githubToken.trim() || backingUp) return;
-    setBackingUp(true); setBackupMsg("Backing up...");
-    try {
-      const body = {
-        description: "ROrbit Knowledge Base",
-        public: false,
-        files: { "rorbit-nodes.json": { content: JSON.stringify({ nodes, savedAt: new Date().toISOString() }, null, 2) } }
-      };
-      const headers = { "Content-Type":"application/json", "Authorization":`token ${githubToken.trim()}` };
-      const url    = gistId ? `https://api.github.com/gists/${gistId}` : "https://api.github.com/gists";
-      const method = gistId ? "PATCH" : "POST";
-      const res    = await fetch(url, { method, headers, body: JSON.stringify(body) });
-      if (!res.ok) throw new Error(res.status);
-      const data   = await res.json();
-      saveGistId(data.id);
-      setBackupMsg(`✓ Backed up — ${nodes.length} nodes saved`);
-    } catch (e) { setBackupMsg(`Failed (${e.message}). Check your token.`); }
-    setBackingUp(false);
-    setTimeout(() => setBackupMsg(""), 5000);
-  };
-
-  const restoreFromGist = async () => {
-    if (!githubToken.trim() || !gistId || backingUp) return;
-    if (!window.confirm("Replace current nodes with backup? This cannot be undone.")) return;
-    setBackingUp(true); setBackupMsg("Restoring...");
-    try {
-      const res  = await fetch(`https://api.github.com/gists/${gistId}`, {
-        headers: { "Authorization":`token ${githubToken.trim()}` }
-      });
-      if (!res.ok) throw new Error(res.status);
-      const data = await res.json();
-      const txt  = data.files["rorbit-nodes.json"]?.content;
-      if (!txt) throw new Error("file not found");
-      const { nodes: restored } = JSON.parse(txt);
-      if (!Array.isArray(restored)) throw new Error("invalid format");
-      setNodes(restored); persist(restored);
-      setBackupMsg(`✓ Restored ${restored.length} nodes`);
-    } catch (e) { setBackupMsg(`Failed (${e.message}). Check token + Gist ID.`); }
-    setBackingUp(false);
-    setTimeout(() => setBackupMsg(""), 5000);
-  };
-
-  // ── applyAppearances ──────────────────────────────────────────────────────
+  // ── applyAppearances — material mutation only ─────────────────────────────
   const applyAppearances = useCallback(() => {
     const { meshMap } = three.current;
     if (!meshMap) return;
@@ -256,6 +220,7 @@ export default function ROrbit() {
     const scene  = new THREE.Scene();
     const camera = new THREE.PerspectiveCamera(55, el.clientWidth / el.clientHeight, 0.1, 100);
     camera.position.z = 7;
+
     const renderer = new THREE.WebGLRenderer({ antialias:true });
     renderer.setSize(el.clientWidth, el.clientHeight);
     renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
@@ -336,8 +301,8 @@ export default function ROrbit() {
     const onTE = () => { dragging = false; lastPinchDist = null; resumeSpin(); };
 
     const d = renderer.domElement;
-    d.addEventListener("mousedown",  onMD); d.addEventListener("mousemove", onMM);
-    d.addEventListener("mouseup",    onMU); d.addEventListener("click",     onClick);
+    d.addEventListener("mousedown",  onMD); d.addEventListener("mousemove",  onMM);
+    d.addEventListener("mouseup",    onMU); d.addEventListener("click",      onClick);
     d.addEventListener("wheel",      onWheel, { passive:false });
     d.addEventListener("touchstart", onTS,    { passive:false });
     d.addEventListener("touchmove",  onTM,    { passive:false });
@@ -355,10 +320,14 @@ export default function ROrbit() {
       if (autoSpin && !dragging) group.quaternion.premultiply(SPIN_Q);
       const anim = newNodeAnim.current;
       if (anim?.startTime != null) {
-        const t = Math.min((performance.now() - anim.startTime) / 650, 1);
-        const e = easeOut(t);
+        const t  = Math.min((performance.now() - anim.startTime) / 650, 1);
+        const e  = easeOut(t);
         const md = three.current.meshMap?.[anim.id];
-        if (md) { md.ng.scale.setScalar(e); md.glow.material.opacity = e * 0.15 + (1 - e) * 0.55; md.glow.material.needsUpdate = true; }
+        if (md) {
+          md.ng.scale.setScalar(e);
+          md.glow.material.opacity     = e * 0.15 + (1 - e) * 0.55;
+          md.glow.material.needsUpdate = true;
+        }
         if (t >= 1) { if (md) { md.glow.material.opacity = 0.15; md.glow.material.needsUpdate = true; } newNodeAnim.current = null; }
       }
       renderer.render(scene, camera);
@@ -368,16 +337,16 @@ export default function ROrbit() {
 
     return () => {
       cancelAnimationFrame(raf); clearTimeout(spinTimer);
-      d.removeEventListener("mousedown",  onMD); d.removeEventListener("mousemove", onMM);
-      d.removeEventListener("mouseup",    onMU); d.removeEventListener("click",     onClick);
+      d.removeEventListener("mousedown",  onMD); d.removeEventListener("mousemove",  onMM);
+      d.removeEventListener("mouseup",    onMU); d.removeEventListener("click",      onClick);
       d.removeEventListener("wheel",      onWheel);
-      d.removeEventListener("touchstart", onTS); d.removeEventListener("touchmove", onTM); d.removeEventListener("touchend", onTE);
+      d.removeEventListener("touchstart", onTS); d.removeEventListener("touchmove",  onTM); d.removeEventListener("touchend", onTE);
       window.removeEventListener("resize", onResize);
       if (el.contains(d)) el.removeChild(d); renderer.dispose();
     };
   }, []);
 
-  // ── Effect 1: Rebuild scene when nodes change ─────────────────────────────
+  // ── Effect 1: Full rebuild — only when nodes change ───────────────────────
   useEffect(() => {
     const { group, nodeGroups, allConnLines } = three.current;
     if (!group) return;
@@ -386,6 +355,7 @@ export default function ROrbit() {
 
     const meshMap = {}, newGroups = [], newConnLines = [], clicks = [];
 
+    // Ghost nodes when sphere is empty — so it never looks barren
     if (nodes.length === 0) {
       GHOST_POSITIONS.forEach((gp, i) => {
         const col = new THREE.Color(CATEGORIES[i % CATEGORIES.length].color);
@@ -401,40 +371,66 @@ export default function ROrbit() {
       const c   = getcat(node.category);
       const pos = toXYZ(node.position.theta, node.position.phi);
       const col = new THREE.Color(c.color);
-      const core = new THREE.Mesh(new THREE.SphereGeometry(0.095, 14, 14), new THREE.MeshBasicMaterial({ color:col }));
+
+      const core = new THREE.Mesh(
+        new THREE.SphereGeometry(0.095, 14, 14),
+        new THREE.MeshBasicMaterial({ color:col })
+      );
       core.userData.nodeId = node.id;
-      const glow = new THREE.Mesh(new THREE.SphereGeometry(0.20, 14, 14), new THREE.MeshBasicMaterial({ color:col, transparent:true, opacity:0.15 }));
+
+      const glow = new THREE.Mesh(
+        new THREE.SphereGeometry(0.20, 14, 14),
+        new THREE.MeshBasicMaterial({ color:col, transparent:true, opacity:0.15 })
+      );
       glow.userData.nodeId = node.id;
-      const hit  = new THREE.Mesh(new THREE.SphereGeometry(0.32, 6, 6), new THREE.MeshBasicMaterial({ transparent:true, opacity:0, depthWrite:false, colorWrite:false }));
+
+      // Larger invisible hit sphere — improves tap accuracy on mobile
+      const hit = new THREE.Mesh(
+        new THREE.SphereGeometry(0.32, 6, 6),
+        new THREE.MeshBasicMaterial({ transparent:true, opacity:0, depthWrite:false, colorWrite:false })
+      );
       hit.userData.nodeId = node.id;
       clicks.push(hit, core, glow);
-      const ng = new THREE.Group(); ng.add(core); ng.add(glow); ng.add(hit);
+
+      const ng = new THREE.Group();
+      ng.add(core); ng.add(glow); ng.add(hit);
       ng.position.set(pos.x, pos.y, pos.z);
       group.add(ng); newGroups.push(ng);
       meshMap[node.id] = { ng, core, glow, category:node.category };
     });
 
+    // Semantic connection lines
     const drawnPairs = new Set();
     const nodeMap    = Object.fromEntries(nodes.map(n => [n.id, n]));
     nodes.forEach(node => {
       (node.connections ?? []).forEach(connId => {
         const pk = [node.id, connId].sort().join("|");
-        if (drawnPairs.has(pk)) return; drawnPairs.add(pk);
-        const target = nodeMap[connId]; if (!target) return;
+        if (drawnPairs.has(pk)) return;
+        drawnPairs.add(pk);
+        const target = nodeMap[connId];
+        if (!target) return;
         const sameCat = node.category === target.category;
-        const pa = toXYZ(node.position.theta, node.position.phi);
+        const pa = toXYZ(node.position.theta,   node.position.phi);
         const pb = toXYZ(target.position.theta, target.position.phi);
         const ln = new THREE.Line(
-          new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(pa.x,pa.y,pa.z), new THREE.Vector3(pb.x,pb.y,pb.z)]),
-          new THREE.LineBasicMaterial({ color: sameCat ? new THREE.Color(getcat(node.category).color) : new THREE.Color(0x8aaac0), transparent:true, opacity: sameCat ? 0.35 : 0.22 })
+          new THREE.BufferGeometry().setFromPoints([
+            new THREE.Vector3(pa.x, pa.y, pa.z),
+            new THREE.Vector3(pb.x, pb.y, pb.z),
+          ]),
+          new THREE.LineBasicMaterial({
+            color: sameCat ? new THREE.Color(getcat(node.category).color) : new THREE.Color(0x8aaac0),
+            transparent:true, opacity: sameCat ? 0.35 : 0.22,
+          })
         );
         ln.userData.catA = node.category; ln.userData.catB = target.category;
         group.add(ln); newConnLines.push(ln);
       });
     });
 
-    three.current.meshMap = meshMap; three.current.nodeGroups = newGroups;
-    three.current.allConnLines = newConnLines; three.current.clickables = clicks;
+    three.current.meshMap      = meshMap;
+    three.current.nodeGroups   = newGroups;
+    three.current.allConnLines = newConnLines;
+    three.current.clickables   = clicks;
 
     if (newNodeAnim.current && newNodeAnim.current.startTime == null) {
       const md = meshMap[newNodeAnim.current.id];
@@ -446,20 +442,39 @@ export default function ROrbit() {
   // ── Effect 2: Appearances only ────────────────────────────────────────────
   useEffect(() => { applyAppearances(); }, [selected, reviewNode, highlighted, activeCategory, applyAppearances]);
 
-  // ── API calls ─────────────────────────────────────────────────────────────
-  const addThought = async () => {
+  // ── API: Add ──────────────────────────────────────────────────────────────
+  const addThought = async (mode = addMode) => {
     if (!input.trim() || adding) return;
-    setAdding(true);
+    setAdding(true); setAddMode(mode);
     try {
       const existingCtx = nodes.length > 0
-        ? `\n\nExisting nodes — add to "connections" ONLY for clear, unambiguous conceptual links. Empty array otherwise:\n${nodes.slice(-40).map(n => `[${n.id}] ${n.title} (${n.category}): ${n.insight}`).join("\n")}`
+        ? `\n\nExisting nodes — add to "connections" ONLY if there is a clear, unambiguous conceptual link. Omit weak or superficial ones. Empty array if nothing qualifies:\n${
+            nodes.slice(-40).map(n => `[${n.id}] ${n.title} (${n.category}): ${n.insight}`).join("\n")
+          }`
         : "";
-      const res  = await fetch("/api/chat", {
+
+      const exampleNote = exampleInput.trim()
+        ? `\nExample provided by user: "${exampleInput.trim()}"`
+        : "";
+
+      const insightInstruction = mode === "keep"
+        ? `For "insight": correct ONLY grammar and spelling. Preserve the user's exact words, substance, and phrasing as closely as possible — do NOT rephrase, synthesize, or rewrite.`
+        : `For "insight": distill the core idea into 1-2 clear, precise sentences.`;
+
+      const exampleInstruction = exampleInput.trim()
+        ? (mode === "keep"
+            ? `For "example": correct only grammar and spelling, preserve exactly as written.`
+            : `For "example": lightly clarify for readability if needed, preserve the substance.`)
+        : `For "example": return null.`;
+
+      const res = await fetch("https://api.anthropic.com/v1/messages", {
         method:"POST", headers:{ "Content-Type":"application/json" },
         body: JSON.stringify({
-          model:"claude-sonnet-4-5", max_tokens:700,
+          model:"claude-sonnet-4-20250514", max_tokens:800,
           system:"Knowledge graph classifier. Return ONLY valid JSON. No markdown.",
-          messages:[{ role:"user", content:`Thought: "${input}"\nCategories: ${CATEGORIES.map(c => c.name).join(", ")}${existingCtx}\n\nReturn JSON:\n{"title":"4-7 word title","insight":"1-2 sentence distillation","category":"exact category name","tags":["2-4 tags"],"connections":["nodeId — max 3, genuine only, else empty"]}` }]
+          messages:[{ role:"user", content:
+            `Thought: "${input}"${exampleNote}\nCategories: ${CATEGORIES.map(c => c.name).join(", ")}${existingCtx}\n\n${insightInstruction}\n${exampleInstruction}\n\nReturn JSON:\n{"title":"4-7 word title","insight":"see instruction above","example":null,"category":"exact category name","tags":["2-4 tags"],"connections":["nodeId — max 3, genuine only, else empty"]}`
+          }]
         })
       });
       const data = await res.json();
@@ -469,38 +484,49 @@ export default function ROrbit() {
         id:`n${Date.now()}`, rawInput:input,
         title:      p.title   ?? "Untitled",
         insight:    p.insight ?? input,
+        example:    p.example ?? (exampleInput.trim() || null),
         category:   CATEGORIES.find(c => c.name===p.category) ? p.category : CATEGORIES[0].name,
         tags:       p.tags ?? [],
         connections: (p.connections ?? []).filter(id => validIds.has(id)),
         position:   rndpos(),
         createdAt:  new Date().toISOString(),
+        addMode:    mode,
       };
       newNodeAnim.current = { id:node.id, startTime:null };
       const next = [...nodes, node];
-      setNodes(next); persist(next); setInput("");
+      setNodes(next); persist(next); setInput(""); setExampleInput("");
       setLastAdded({ title:node.title, category:node.category });
-    } catch {}
+    } catch { /* silent fail */ }
     setAdding(false);
   };
 
+  // ── API: Query ────────────────────────────────────────────────────────────
   const doQuery = async () => {
     if (!queryText.trim() || querying || !nodes.length) return;
     setQuerying(true); setSynthesis(""); setHighlighted([]);
     try {
       const ctx = nodes.map(n => `[${n.id}] ${n.title} — ${n.category} — ${n.insight}`).join("\n");
-      const res = await fetch("/api/chat", {
+      const res = await fetch("https://api.anthropic.com/v1/messages", {
         method:"POST", headers:{ "Content-Type":"application/json" },
-        body: JSON.stringify({ model:"claude-sonnet-4-5", max_tokens:600, system:"Knowledge graph search. Return ONLY valid JSON.", messages:[{ role:"user", content:`Question: "${queryText}"\n\nNodes:\n${ctx}\n\nReturn JSON:\n{"relevant_ids":["up to 5 node IDs"],"synthesis":"2-3 sentence synthesis"}` }] })
+        body: JSON.stringify({
+          model:"claude-sonnet-4-20250514", max_tokens:600,
+          system:"Knowledge graph search. Return ONLY valid JSON.",
+          messages:[{ role:"user", content:
+            `Question: "${queryText}"\n\nNodes:\n${ctx}\n\nReturn JSON:\n{"relevant_ids":["up to 5 node IDs"],"synthesis":"2-3 sentence synthesis"}`
+          }]
+        })
       });
       const data = await res.json();
       const p    = JSON.parse((data.content?.find(b => b.type==="text")?.text ?? "{}").replace(/```json|```/g,"").trim());
       setHighlighted(p.relevant_ids ?? []); setSynthesis(p.synthesis ?? "");
-    } catch {}
+    } catch { /* silent fail */ }
     setQuerying(false);
   };
 
+  // ── API: Challenge — weighted toward least-recently-challenged ────────────
   const challengeMe = async () => {
     if (!nodes.length) return;
+    // Sort ascending by lastChallenged: null (never) first, then oldest
     const sorted = [...nodes].sort((a, b) => {
       const ta = a.lastChallenged ? new Date(a.lastChallenged).getTime() : 0;
       const tb = b.lastChallenged ? new Date(b.lastChallenged).getTime() : 0;
@@ -508,14 +534,23 @@ export default function ROrbit() {
     });
     const pool = sorted.slice(0, Math.max(1, Math.ceil(sorted.length * 0.6)));
     const rnd  = pool[Math.floor(Math.random() * pool.length)];
-    const now  = new Date().toISOString();
+
+    // Stamp lastChallenged
+    const now   = new Date().toISOString();
     const stamped = nodes.map(n => n.id === rnd.id ? { ...n, lastChallenged:now } : n);
     setNodes(stamped); persist(stamped);
+
     setReviewNode(rnd); setSelected(rnd); setChallenge(""); setEditing(false); setChallenging(true);
     try {
-      const res = await fetch("/api/chat", {
+      const res = await fetch("https://api.anthropic.com/v1/messages", {
         method:"POST", headers:{ "Content-Type":"application/json" },
-        body: JSON.stringify({ model:"claude-sonnet-4-5", max_tokens:250, system:"Generate one sharp, thought-provoking question. Return ONLY the question.", messages:[{ role:"user", content:`Concept: "${rnd.title}" — ${rnd.insight}\nCategory: ${rnd.category}\n\nAsk one pointed question that challenges assumptions or demands deeper understanding.` }] })
+        body: JSON.stringify({
+          model:"claude-sonnet-4-20250514", max_tokens:250,
+          system:"Generate one sharp, thought-provoking question. Return ONLY the question.",
+          messages:[{ role:"user", content:
+            `Concept: "${rnd.title}" — ${rnd.insight}\nCategory: ${rnd.category}\n\nAsk one pointed question that challenges assumptions or demands deeper understanding.`
+          }]
+        })
       });
       const data = await res.json();
       setChallenge(data.content?.find(b => b.type==="text")?.text?.trim() ?? "");
@@ -525,7 +560,7 @@ export default function ROrbit() {
 
   const openEditFor = (node) => {
     setReviewNode(node); setSelected(node);
-    setEditData({ title:node.title, insight:node.insight, category:node.category, tags:node.tags.join(", ") });
+    setEditData({ title:node.title, insight:node.insight, example:node.example||"", category:node.category, tags:node.tags.join(", ") });
     setEditing(true); setPanel("explore");
   };
 
@@ -534,13 +569,13 @@ export default function ROrbit() {
     const updated = { ...reviewNode,
       title:    editData.title.trim()   || reviewNode.title,
       insight:  editData.insight.trim() || reviewNode.insight,
+      example:  editData.example?.trim() || null,
       category: CATEGORIES.find(c => c.name===editData.category) ? editData.category : reviewNode.category,
       tags:     editData.tags.split(",").map(t => t.trim()).filter(Boolean),
     };
     const next = nodes.map(n => n.id===reviewNode.id ? updated : n);
     setNodes(next); persist(next); setReviewNode(updated); setSelected(updated); setEditing(false);
   };
-
   const deleteNode = (id) => {
     const next = nodes.filter(n => n.id !== id);
     setNodes(next); persist(next);
@@ -549,23 +584,30 @@ export default function ROrbit() {
     setEditing(false);
   };
 
+  // ── API: Recommendations ──────────────────────────────────────────────────
   const getRecs = async () => {
     if (!nodes.length || loadingRecs) return;
     setLoadingRecs(true); setRecs(null);
     try {
       const summary = nodes.map(n => `${n.title} [${n.category}]: ${n.insight}`).join("\n");
-      const res = await fetch("/api/chat", {
+      const res = await fetch("https://api.anthropic.com/v1/messages", {
         method:"POST", headers:{ "Content-Type":"application/json" },
-        body: JSON.stringify({ model:"claude-sonnet-4-5", max_tokens:1200, system:"You are a knowledge curator. Return ONLY valid JSON.", messages:[{ role:"user", content:`Based on this knowledge base, recommend resources that genuinely extend or challenge this thinking.\n\nNodes:\n${summary}\n\nReturn JSON:\n{"books":[{"title":"","author":"","reason":""}],"podcasts":[{"title":"","host":"","reason":""}],"videos":[{"title":"","creator":"","reason":""}]}\n\nExactly 3 per array. Be specific.` }] })
+        body: JSON.stringify({
+          model:"claude-sonnet-4-20250514", max_tokens:1200,
+          system:"You are a knowledge curator. Return ONLY valid JSON.",
+          messages:[{ role:"user", content:
+            `Based on this knowledge base, recommend resources that genuinely extend or challenge this thinking.\n\nNodes:\n${summary}\n\nReturn JSON:\n{"books":[{"title":"","author":"","reason":""}],"podcasts":[{"title":"","host":"","reason":""}],"videos":[{"title":"","creator":"","reason":""}]}\n\nExactly 3 per array. Be specific.`
+          }]
+        })
       });
       const data = await res.json();
       const p    = JSON.parse((data.content?.find(b => b.type==="text")?.text ?? "{}").replace(/```json|```/g,"").trim());
       setRecs(p);
-    } catch {}
+    } catch { /* silent fail */ }
     setLoadingRecs(false);
   };
 
-  // ── Styles ────────────────────────────────────────────────────────────────
+  // ── Style helpers ─────────────────────────────────────────────────────────
   const taBase    = { width:"100%", background:T.inputBg, border:`1px solid ${T.inputBorder}`, borderRadius:"6px", color:T.text, padding:"10px 12px", fontSize:"13px", fontFamily:sans, lineHeight:1.65, outline:"none", boxSizing:"border-box" };
   const ta        = { ...taBase, resize:"vertical" };
   const inp       = { ...taBase, resize:"none" };
@@ -575,6 +617,17 @@ export default function ROrbit() {
 
   const selCat = selected   ? getcat(selected.category)   : null;
   const rvCat  = reviewNode ? getcat(reviewNode.category) : null;
+
+  // Connected node titles — used in detail cards
+  const ExampleBlock = ({ nodeObj }) => {
+    if (!nodeObj?.example) return null;
+    return (
+      <div style={{ marginTop:"10px", padding:"9px 11px", background: isLight ? "#e8f4ff" : "#071e35", border:`1px solid ${isLight ? "#b0c8da" : "#1a3a55"}`, borderRadius:"6px" }}>
+        <div style={{ fontFamily:mono, fontSize:"8px", color:T.textDim, letterSpacing:"2px", marginBottom:"5px" }}>EXAMPLE</div>
+        <div style={{ fontSize:"12px", color:T.textMuted, lineHeight:1.75, fontStyle:"italic" }}>{nodeObj.example}</div>
+      </div>
+    );
+  };
 
   const ConnectedNodes = ({ nodeObj }) => {
     if (!nodeObj?.connections?.length) return null;
@@ -596,12 +649,12 @@ export default function ROrbit() {
     );
   };
 
-  const filteredNodes = [...nodes].filter(n =>
+  const filteredNodes = nodes.filter(n =>
     !nodeSearch.trim() ||
     n.title.toLowerCase().includes(nodeSearch.toLowerCase()) ||
     n.category.toLowerCase().includes(nodeSearch.toLowerCase()) ||
     n.tags.some(t => t.toLowerCase().includes(nodeSearch.toLowerCase()))
-  ).reverse();
+  );
 
   return (
     <div style={{ width:"100%", height:"100vh", background:T.appBg, display:"flex", flexDirection:"column", color:T.text, overflow:"hidden", fontFamily:sans, transition:"background 0.3s" }}>
@@ -618,12 +671,16 @@ export default function ROrbit() {
           {!isMobile && <span style={{ fontFamily:mono, fontSize:"9px", color:T.textDim, letterSpacing:"3px" }}>KNOWLEDGE SPHERE</span>}
         </div>
         <div style={{ display:"flex", alignItems:"center", gap:"12px" }}>
+          {/* Sphere brightness — dark mode only */}
           {!isLight && (
             <div style={{ display:"flex", alignItems:"center", gap:"6px" }}>
-              <span style={{ fontFamily:mono, fontSize:"9px", color:T.textDim }}>☽</span>
-              <input type="range" min="0" max="100" value={sphereBrightness} onChange={e => setSphereBrightness(Number(e.target.value))}
-                style={{ width:isMobile?"60px":"72px", accentColor:T.accent, cursor:"pointer", opacity:0.8 }} />
-              <span style={{ fontFamily:mono, fontSize:"9px", color:T.textDim }}>☀</span>
+              <span style={{ fontFamily:mono, fontSize:"8px", color:T.textDim, letterSpacing:"1px" }}>☽</span>
+              <input
+                type="range" min="0" max="100" value={sphereBrightness}
+                onChange={e => setSphereBrightness(Number(e.target.value))}
+                style={{ width: isMobile ? "60px" : "72px", accentColor:T.accent, cursor:"pointer", opacity:0.8 }}
+              />
+              <span style={{ fontFamily:mono, fontSize:"8px", color:T.textDim, letterSpacing:"1px" }}>☀</span>
             </div>
           )}
           <span style={{ fontFamily:mono, fontSize:"9px", color:T.textDim, letterSpacing:"2px" }}>{nodes.length} NODE{nodes.length!==1?"S":""}</span>
@@ -636,7 +693,7 @@ export default function ROrbit() {
       <div style={{ flex:1, display:"flex", overflow:"hidden", flexDirection:isMobile ? "column" : "row" }}>
 
         {/* Sphere */}
-        <div ref={mountRef} style={{ position:"relative", flex:isMobile?"none":1, height:isMobile?"46vh":"auto", minHeight:isMobile?"200px":"auto" }}>
+        <div ref={mountRef} style={{ position:"relative", flex:isMobile ? "none" : 1, height:isMobile ? "46vh" : "auto", minHeight:isMobile ? "200px" : "auto" }}>
           <div style={{ position:"absolute", top:10, right:10, fontFamily:mono, fontSize:"9px", color:"#1a3a52", letterSpacing:"1px", pointerEvents:"none" }}>
             {isMobile ? "pinch to zoom" : "scroll to zoom"}
           </div>
@@ -659,6 +716,7 @@ export default function ROrbit() {
               <div style={{ fontFamily:mono, fontSize:"8px", color:selCat.color, letterSpacing:"2.5px", marginBottom:"6px" }}>{selected.category.toUpperCase()}</div>
               <div style={{ fontSize:"13px", fontWeight:500, color:T.text, marginBottom:"7px", lineHeight:1.4 }}>{selected.title}</div>
               <div style={{ fontSize:"12px", color:T.textMuted, lineHeight:1.75 }}>{selected.insight}</div>
+              <ExampleBlock nodeObj={selected} />
               <ConnectedNodes nodeObj={selected} />
               {selected.tags?.length > 0 && (
                 <div style={{ display:"flex", gap:"5px", flexWrap:"wrap", marginTop:"10px" }}>
@@ -669,20 +727,21 @@ export default function ROrbit() {
             </div>
           )}
 
-          {/* Mobile node card */}
+          {/* Mobile node card — compact pill, tap to expand */}
           {selected && selCat && isMobile && (
             <div onClick={() => setMobileCardExpanded(e => !e)}
-              style={{ position:"absolute", bottom:0, left:0, right:0, background:T.selBg, borderTop:`1px solid ${selCat.color}35`, borderRadius:"10px 10px 0 0", padding:mobileCardExpanded?"14px 16px":"10px 14px", cursor:"pointer", transition:"padding 0.18s ease" }}>
+              style={{ position:"absolute", bottom:0, left:0, right:0, background:T.selBg, borderTop:`1px solid ${selCat.color}35`, borderRadius:"10px 10px 0 0", padding:mobileCardExpanded ? "14px 16px" : "10px 14px", cursor:"pointer", transition:"padding 0.18s ease" }}>
               <div style={{ display:"flex", alignItems:"center", gap:"8px" }}>
                 <div style={{ width:"7px", height:"7px", borderRadius:"50%", background:selCat.color, boxShadow:`0 0 6px ${selCat.color}`, flexShrink:0 }} />
-                <div style={{ fontSize:"13px", fontWeight:500, color:T.text, flex:1, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:mobileCardExpanded?"normal":"nowrap" }}>{selected.title}</div>
-                <span style={{ fontFamily:mono, fontSize:"9px", color:T.textDim }}>{mobileCardExpanded?"▼":"▲"}</span>
+                <div style={{ fontSize:"13px", fontWeight:500, color:T.text, flex:1, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:mobileCardExpanded ? "normal" : "nowrap" }}>{selected.title}</div>
+                <span style={{ fontFamily:mono, fontSize:"9px", color:T.textDim }}>{mobileCardExpanded ? "▼" : "▲"}</span>
                 <button onClick={(e) => { e.stopPropagation(); setSelected(null); }} style={{ background:"none", border:"none", fontFamily:mono, color:T.textDim, fontSize:"12px", cursor:"pointer", padding:"0 0 0 6px" }}>✕</button>
               </div>
               {mobileCardExpanded && (
                 <div style={{ marginTop:"10px" }}>
                   <div style={{ fontFamily:mono, fontSize:"8px", color:selCat.color, letterSpacing:"2px", marginBottom:"6px" }}>{selected.category.toUpperCase()}</div>
                   <div style={{ fontSize:"12px", color:T.textMuted, lineHeight:1.75 }}>{selected.insight}</div>
+                  <ExampleBlock nodeObj={selected} />
                   <ConnectedNodes nodeObj={selected} />
                   {selected.tags?.length > 0 && (
                     <div style={{ display:"flex", gap:"4px", flexWrap:"wrap", marginTop:"8px" }}>
@@ -709,12 +768,12 @@ export default function ROrbit() {
         </div>
 
         {/* Panel */}
-        <div className="rorbit-panel" style={{ width:isMobile?"100%":"272px", borderLeft:isMobile?"none":`1px solid ${T.border}`, borderTop:isMobile?`1px solid ${T.border}`:"none", display:"flex", flexDirection:"column", background:T.panelBg, flexShrink:0, flex:isMobile?1:"none", overflow:isMobile?"hidden":"visible", transition:"background 0.3s" }}>
+        <div className="rorbit-panel" style={{ width:isMobile ? "100%" : "272px", borderLeft:isMobile ? "none" : `1px solid ${T.border}`, borderTop:isMobile ? `1px solid ${T.border}` : "none", display:"flex", flexDirection:"column", background:T.panelBg, flexShrink:0, flex:isMobile ? 1 : "none", overflow:isMobile ? "hidden" : "visible", transition:"background 0.3s" }}>
 
           {/* Tabs */}
           <div style={{ display:"flex", borderBottom:`1px solid ${T.border}`, flexShrink:0 }}>
             {[["capture","CAPTURE"],["explore","EXPLORE"],["library","LIBRARY"]].map(([id, label]) => (
-              <button key={id} onClick={() => setPanel(id)} style={{ flex:1, padding:"11px 4px", background:"none", border:"none", borderBottom:`2px solid ${panel===id ? T.accent : "transparent"}`, color:panel===id ? T.accent : T.text, fontFamily:mono, fontSize:"9px", fontWeight:panel===id?700:500, letterSpacing:"1.5px", cursor:"pointer", opacity:panel===id?1:0.65 }}>{label}</button>
+              <button key={id} onClick={() => setPanel(id)} style={{ flex:1, padding:"11px 4px", background:"none", border:"none", borderBottom:`2px solid ${panel===id ? T.accent : "transparent"}`, color:panel===id ? T.accent : T.text, fontFamily:mono, fontSize:"9px", fontWeight:panel===id ? 700 : 500, letterSpacing:"1.5px", cursor:"pointer", opacity: panel===id ? 1 : 0.65 }}>{label}</button>
             ))}
           </div>
 
@@ -727,11 +786,32 @@ export default function ROrbit() {
                 <textarea value={input} onChange={e => setInput(e.target.value)}
                   onKeyDown={e => (e.metaKey||e.ctrlKey) && e.key==="Enter" && addThought()}
                   placeholder="A concept, principle, quote, or observation..."
-                  style={{ ...ta, minHeight:"110px" }} />
-                <button onClick={addThought} disabled={adding||!input.trim()} style={aBtn(!!input.trim()&&!adding, T.accent)}>
-                  {adding ? "PROCESSING..." : "ADD TO SPHERE"}
-                </button>
-                <div style={{ fontFamily:mono, fontSize:"8px", color:T.textDim, marginTop:"2px" }}>⌘ + ENTER to add quickly</div>
+                  style={{ ...ta, minHeight:"100px" }} />
+
+                {/* Optional example */}
+                <div style={{ display:"flex", alignItems:"center", gap:"6px" }}>
+                  <div style={{ ...lbl, marginBottom:0 }}>EXAMPLE</div>
+                  <span style={{ fontFamily:mono, fontSize:"8px", color:T.textDim }}>(optional)</span>
+                </div>
+                <textarea value={exampleInput} onChange={e => setExampleInput(e.target.value)}
+                  placeholder="A real-world instance, analogy, or illustration of this idea..."
+                  style={{ ...ta, minHeight:"70px" }} />
+
+                {/* Two add buttons */}
+                <div style={{ display:"flex", gap:"8px", marginTop:"2px" }}>
+                  <button onClick={() => addThought("keep")} disabled={adding||!input.trim()}
+                    style={{ ...aBtn(!!input.trim()&&!adding, T.accent), flex:1, fontSize:"9px", letterSpacing:"1px" }}>
+                    {adding && addMode==="keep" ? "PROCESSING..." : "✎ KEEP MY WORDS"}
+                  </button>
+                  <button onClick={() => addThought("enhance")} disabled={adding||!input.trim()}
+                    style={{ ...aBtn(!!input.trim()&&!adding, T.accentG), flex:1, fontSize:"9px", letterSpacing:"1px" }}>
+                    {adding && addMode==="enhance" ? "PROCESSING..." : "✦ AI ENHANCE"}
+                  </button>
+                </div>
+                <div style={{ fontFamily:mono, fontSize:"8px", color:T.textDim }}>
+                  <span style={{ color:T.accent }}>✎ Keep</span> — grammar fixes only &nbsp;·&nbsp; <span style={{ color:T.accentG }}>✦ Enhance</span> — AI synthesises
+                </div>
+
                 {lastAdded && (
                   <div style={{ background:T.nodeBg, border:`1px solid ${T.border}`, borderRadius:"6px", padding:"9px 12px", display:"flex", alignItems:"center", gap:"9px", marginTop:"2px" }}>
                     <div style={{ width:"6px", height:"6px", borderRadius:"50%", background:getcat(lastAdded.category).color, boxShadow:`0 0 5px ${getcat(lastAdded.category).color}`, flexShrink:0 }} />
@@ -748,7 +828,9 @@ export default function ROrbit() {
             {panel==="explore" && (
               <div style={{ display:"flex", flexDirection:"column", gap:"10px" }}>
                 <div style={lbl}>QUERY YOUR SPHERE</div>
-                <textarea value={queryText} onChange={e => setQueryText(e.target.value)} placeholder="Describe a problem or challenge..." style={{ ...ta, minHeight:"80px" }} />
+                <textarea value={queryText} onChange={e => setQueryText(e.target.value)}
+                  placeholder="Describe a problem or challenge..."
+                  style={{ ...ta, minHeight:"80px" }} />
                 <button onClick={doQuery} disabled={querying||!queryText.trim()||!nodes.length} style={aBtn(!!queryText.trim()&&!querying&&nodes.length>0, T.accentG)}>
                   {querying ? "SEARCHING..." : "SEARCH SPHERE"}
                 </button>
@@ -758,7 +840,7 @@ export default function ROrbit() {
                     <div style={{ fontSize:"12px", color:T.textMuted, lineHeight:1.8 }}>{synthesis}</div>
                     <div style={{ fontFamily:mono, fontSize:"9px", color:T.textDim, marginTop:"6px" }}>{highlighted.length} nodes highlighted on sphere</div>
                     <button onClick={() => { setHighlighted([]); setSynthesis(""); setQueryText(""); }}
-                      style={{ marginTop:"8px", background:"none", border:`1px solid ${T.border}`, borderRadius:"4px", fontFamily:mono, color:T.textDim, fontSize:"8px", cursor:"pointer", padding:"3px 10px" }}>CLEAR</button>
+                      style={{ marginTop:"8px", background:"none", border:`1px solid ${T.border}`, borderRadius:"4px", fontFamily:mono, color:T.textDim, fontSize:"8px", cursor:"pointer", padding:"3px 10px", letterSpacing:"1px" }}>CLEAR</button>
                   </div>
                 )}
                 {!nodes.length && <div style={{ fontSize:"12px", color:T.textDim }}>Add nodes first.</div>}
@@ -776,6 +858,7 @@ export default function ROrbit() {
                       <div style={{ fontFamily:mono, fontSize:"8px", color:rvCat.color, letterSpacing:"2px", marginBottom:"6px" }}>{reviewNode.category.toUpperCase()}</div>
                       <div style={{ fontSize:"13px", fontWeight:500, color:T.text, marginBottom:"6px", lineHeight:1.4 }}>{reviewNode.title}</div>
                       <div style={{ fontSize:"12px", color:T.textMuted, lineHeight:1.75 }}>{reviewNode.insight}</div>
+                      <ExampleBlock nodeObj={reviewNode} />
                       <ConnectedNodes nodeObj={reviewNode} />
                       {reviewNode.tags?.length > 0 && (
                         <div style={{ display:"flex", gap:"4px", flexWrap:"wrap", marginTop:"8px" }}>
@@ -800,6 +883,15 @@ export default function ROrbit() {
                     <div><div style={lbl}>TITLE</div><input value={editData.title} onChange={e => setEditData(d => ({ ...d, title:e.target.value }))} style={inp} /></div>
                     <div><div style={lbl}>INSIGHT</div><textarea value={editData.insight} onChange={e => setEditData(d => ({ ...d, insight:e.target.value }))} style={{ ...ta, minHeight:"70px" }} /></div>
                     <div>
+                      <div style={{ display:"flex", alignItems:"center", gap:"6px", marginBottom:"6px" }}>
+                        <div style={{ ...lbl, marginBottom:0 }}>EXAMPLE</div>
+                        <span style={{ fontFamily:mono, fontSize:"8px", color:T.textDim }}>(optional)</span>
+                      </div>
+                      <textarea value={editData.example||""} onChange={e => setEditData(d => ({ ...d, example:e.target.value }))}
+                        placeholder="A real-world instance or illustration..."
+                        style={{ ...ta, minHeight:"60px" }} />
+                    </div>
+                    <div>
                       <div style={lbl}>CATEGORY</div>
                       <select value={editData.category} onChange={e => setEditData(d => ({ ...d, category:e.target.value }))} style={{ ...inp, appearance:"none" }}>
                         {CATEGORIES.map(c => <option key={c.name} value={c.name}>{c.name}</option>)}
@@ -818,20 +910,28 @@ export default function ROrbit() {
 
             {/* LIBRARY */}
             {panel==="library" && (
-              <div style={{ display:"flex", flexDirection:"column" }}>
+              <div style={{ display:"flex", flexDirection:"column", gap:"0" }}>
+
+                {/* Nodes section */}
                 <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:"10px" }}>
-                  <div style={lbl}>{filteredNodes.length} NODES{nodeSearch?" FOUND":""}</div>
+                  <div style={lbl}>{filteredNodes.length} NODES{nodeSearch ? " FOUND" : ""}</div>
                   {nodes.length > 0 && (
-                    <button onClick={exportJSON} style={{ background:"none", border:`1px solid ${T.border}`, borderRadius:"4px", fontFamily:mono, fontSize:"8px", color:T.textDim, cursor:"pointer", padding:"3px 8px" }}>↓ EXPORT</button>
+                    <button onClick={exportJSON} style={{ background:"none", border:`1px solid ${T.border}`, borderRadius:"4px", fontFamily:mono, fontSize:"8px", color:T.textDim, cursor:"pointer", padding:"3px 8px", letterSpacing:"1px" }}>↓ EXPORT</button>
                   )}
                 </div>
+
                 {nodes.length > 0 && (
-                  <input value={nodeSearch} onChange={e => setNodeSearch(e.target.value)} placeholder="Search nodes..."
-                    style={{ ...inp, marginBottom:"10px", fontSize:"12px", background:T.searchBg }} />
+                  <input
+                    value={nodeSearch} onChange={e => setNodeSearch(e.target.value)}
+                    placeholder="Search nodes..."
+                    style={{ ...inp, marginBottom:"10px", fontSize:"12px", background:T.searchBg }}
+                  />
                 )}
+
                 {!nodes.length && <div style={{ fontSize:"12px", color:T.textDim, marginBottom:"16px" }}>Empty. Start capturing thoughts.</div>}
+
                 <div style={{ display:"flex", flexDirection:"column", gap:"6px" }}>
-                  {filteredNodes.map(n => {
+                  {filteredNodes.reverse().map(n => {
                     const c = getcat(n.category);
                     return (
                       <div key={n.id} onClick={() => setSelected(p => p?.id===n.id ? null : n)}
@@ -839,7 +939,7 @@ export default function ROrbit() {
                         <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between" }}>
                           <div style={{ fontFamily:mono, fontSize:"8px", color:c.color, letterSpacing:"1.5px", marginBottom:"4px" }}>{n.category.toUpperCase()}</div>
                           <button onClick={(e) => { e.stopPropagation(); openEditFor(n); }}
-                            style={{ background:"none", border:"none", fontFamily:mono, fontSize:"11px", color:T.textDim, cursor:"pointer", padding:"0 0 2px 6px" }}>✎</button>
+                            style={{ background:"none", border:"none", fontFamily:mono, fontSize:"11px", color:T.textDim, cursor:"pointer", padding:"0 0 2px 6px", lineHeight:1 }}>✎</button>
                         </div>
                         <div style={{ fontSize:"12px", color:T.textMuted, lineHeight:1.4 }}>{n.title}</div>
                         {n.connections?.length > 0 && (
@@ -852,12 +952,12 @@ export default function ROrbit() {
 
                 {nodes.length > 0 && dividerEl}
 
-                {/* Discover */}
+                {/* Discover section */}
                 {nodes.length > 0 && (
                   <div style={{ display:"flex", flexDirection:"column", gap:"10px" }}>
                     <div style={{ display:"flex", alignItems:"center", gap:"8px" }}>
                       <div style={lbl}>DISCOVER</div>
-                      <span style={{ fontFamily:mono, fontSize:"8px", color:"#f472b6", border:"1px solid #f472b630", borderRadius:"4px", padding:"1px 6px" }}>BETA</span>
+                      <span style={{ fontFamily:mono, fontSize:"8px", color:"#f472b6", border:"1px solid #f472b630", borderRadius:"4px", padding:"1px 6px", letterSpacing:"1px" }}>BETA</span>
                     </div>
                     <div style={{ fontSize:"12px", color:T.textMuted, lineHeight:1.7 }}>AI-curated books, podcasts and videos based on your sphere.</div>
                     <button onClick={getRecs} disabled={loadingRecs} style={aBtn(!loadingRecs, "#f472b6")}>
@@ -881,62 +981,9 @@ export default function ROrbit() {
                             </div>
                           )
                         ))}
-                        <button onClick={() => setRecs(null)} style={{ background:"none", border:`1px solid ${T.border}`, borderRadius:"4px", fontFamily:mono, color:T.textDim, fontSize:"8px", cursor:"pointer", padding:"4px 10px" }}>CLEAR</button>
+                        <button onClick={() => setRecs(null)} style={{ background:"none", border:`1px solid ${T.border}`, borderRadius:"4px", fontFamily:mono, color:T.textDim, fontSize:"8px", cursor:"pointer", padding:"4px 10px", letterSpacing:"1px" }}>CLEAR</button>
                       </div>
                     )}
-
-                    {dividerEl}
-
-                    {/* GitHub Gist Backup */}
-                    <div>
-                      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:"8px" }}>
-                        <div style={lbl}>CLOUD BACKUP</div>
-                        <button onClick={() => setShowBackup(b => !b)} style={{ background:"none", border:"none", fontFamily:mono, fontSize:"9px", color:T.textDim, cursor:"pointer" }}>
-                          {showBackup ? "▲ HIDE" : "▼ SETUP"}
-                        </button>
-                      </div>
-                      {showBackup && (
-                        <div style={{ display:"flex", flexDirection:"column", gap:"8px" }}>
-                          <div style={{ fontSize:"11px", color:T.textMuted, lineHeight:1.7 }}>
-                            Saves your nodes to a private GitHub Gist. Get a token at{" "}
-                            <a href="https://github.com/settings/tokens/new?scopes=gist" target="_blank" rel="noreferrer"
-                              style={{ color:T.accent, textDecoration:"none" }}>github.com/settings/tokens</a>
-                            {" "}(select only the <strong>gist</strong> scope).
-                          </div>
-                          <div>
-                            <div style={lbl}>GITHUB TOKEN</div>
-                            <input
-                              type="password"
-                              value={githubToken}
-                              onChange={e => saveGithubToken(e.target.value)}
-                              placeholder="ghp_xxxxxxxxxxxx"
-                              style={{ ...inp, fontSize:"12px" }}
-                            />
-                          </div>
-                          {gistId && (
-                            <div>
-                              <div style={lbl}>GIST ID (auto-saved)</div>
-                              <input value={gistId} onChange={e => saveGistId(e.target.value)}
-                                placeholder="Paste existing Gist ID to restore"
-                                style={{ ...inp, fontSize:"11px" }} />
-                            </div>
-                          )}
-                          <div style={{ display:"flex", gap:"8px" }}>
-                            <button onClick={backupToGist} disabled={backingUp || !githubToken.trim()}
-                              style={{ ...aBtn(!!githubToken.trim() && !backingUp, T.accentG), flex:1, fontSize:"9px" }}>
-                              {backingUp ? "..." : "↑ BACKUP"}
-                            </button>
-                            <button onClick={restoreFromGist} disabled={backingUp || !githubToken.trim() || !gistId}
-                              style={{ ...aBtn(!!githubToken.trim() && !!gistId && !backingUp, T.textMuted), flex:1, fontSize:"9px" }}>
-                              {backingUp ? "..." : "↓ RESTORE"}
-                            </button>
-                          </div>
-                          {backupMsg && (
-                            <div style={{ fontSize:"11px", color: backupMsg.startsWith("✓") ? T.accentG : "#f87171", fontFamily:mono }}>{backupMsg}</div>
-                          )}
-                        </div>
-                      )}
-                    </div>
                   </div>
                 )}
               </div>
@@ -957,7 +1004,9 @@ export default function ROrbit() {
                     onClick={() => setActiveCategory(a => a===c.name ? null : c.name)}
                     onMouseEnter={() => setHoveredCat(c.name)}
                     onMouseLeave={() => setHoveredCat(null)}
-                    style={{ display:"flex", alignItems:"center", gap:"5px", padding:"4px 9px", borderRadius:"20px",
+                    style={{
+                      display:"flex", alignItems:"center", gap:"5px",
+                      padding:"4px 9px", borderRadius:"20px",
                       background: isActive ? `${c.color}22` : isHov ? `${c.color}14` : `${c.color}0a`,
                       border:`1px solid ${isActive ? c.color+"70" : isHov ? c.color+"40" : c.color+"25"}`,
                       cursor:"pointer",
