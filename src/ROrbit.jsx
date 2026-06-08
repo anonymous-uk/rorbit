@@ -1247,12 +1247,12 @@ export default function ROrbit() {
                     {(connectUrl.includes("youtube.com") || connectUrl.includes("youtu.be")) && (
                       <div style={{ display:"flex", gap:"8px" }}>
                         <div style={{ flex:1 }}>
-                          <div style={{ fontFamily:mono, fontSize:"8px", color:T.textDim, letterSpacing:"1px", marginBottom:"4px" }}>FROM</div>
+                          <div style={{ fontFamily:mono, fontSize:"8px", color:T.textDim, letterSpacing:"1px", marginBottom:"4px" }}>FROM <span style={{ opacity:0.6 }}>(mins)</span></div>
                           <input value={connectStartTime} onChange={e => setConnectStartTime(e.target.value)}
-                            placeholder="0:00" style={{ ...inp, fontSize:"12px" }} />
+                            placeholder="0" style={{ ...inp, fontSize:"12px" }} />
                         </div>
                         <div style={{ flex:1 }}>
-                          <div style={{ fontFamily:mono, fontSize:"8px", color:T.textDim, letterSpacing:"1px", marginBottom:"4px" }}>TO</div>
+                          <div style={{ fontFamily:mono, fontSize:"8px", color:T.textDim, letterSpacing:"1px", marginBottom:"4px" }}>TO <span style={{ opacity:0.6 }}>(mins)</span></div>
                           <input value={connectEndTime} onChange={e => setConnectEndTime(e.target.value)}
                             placeholder="end" style={{ ...inp, fontSize:"12px" }} />
                         </div>

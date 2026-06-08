@@ -3,9 +3,15 @@
 const isYouTubeUrl = (url) =>
   url.includes('youtube.com/watch') || url.includes('youtu.be/');
 
+// Accepts plain number (treated as minutes) or MM:SS format.
 const parseTimeToMs = (str) => {
   if (!str || !str.trim()) return null;
-  const parts = str.trim().split(':').map(Number);
+  const trimmed = str.trim();
+  if (!trimmed.includes(':')) {
+    const mins = Number(trimmed);
+    return isNaN(mins) ? null : mins * 60 * 1000;
+  }
+  const parts = trimmed.split(':').map(Number);
   if (parts.length !== 2 || parts.some(isNaN)) return null;
   return (parts[0] * 60 + parts[1]) * 1000;
 };
