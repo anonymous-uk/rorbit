@@ -10,42 +10,42 @@ const parseTimeToMs = (str) => {
   return (parts[0] * 60 + parts[1]) * 1000;
 };
 
-// Extract ytInitialPlayerResponse from YouTube page HTML using brace-counting
-// (regex can't reliably handle the multi-megabyte JSON blob)
-const extractPlayerResponse = (html) => {
-  const marker = 'ytInitialPlayerResponse = {';
-  const markerIdx = html.indexOf(marker);
-  if (markerIdx === -1) return null;
-  const start = markerIdx + marker.length - 1; // points to opening '{'
-  let depth = 0;
-  for (let i = start; i < Math.min(html.length, start + 3_000_000); i++) {
-    if (html[i] === '{') depth++;
-    else if (html[i] === '}') { if (--depth === 0) return JSON.parse(html.slice(start, i + 1)); }
-  }
-  return null;
-};
-
 async function fetchYouTubeTranscript(videoId) {
   const pageRes = await fetch(`https://www.youtube.com/watch?v=${videoId}`, {
     headers: {
-      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
       'Accept-Language': 'en-US,en;q=0.9',
-      'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+      'Accept': 'text/html,application/xhtml+xml',
     },
   });
   if (!pageRes.ok) throw new Error(`Page fetch HTTP ${pageRes.status}`);
   const html = await pageRes.text();
 
+  // Title
   const titleMatch = html.match(/<title[^>]*>([^<]*)<\/title>/i);
   const title = (titleMatch?.[1] ?? '').replace(/ - YouTube$/, '').trim();
 
-  const playerResponse = extractPlayerResponse(html);
-  if (!playerResponse) throw new Error('Player response not found in page');
+  // Locate ytInitialPlayerResponse (no space assumption — handles both "= {" and "={")
+  const markerIdx = html.indexOf('ytInitialPlayerResponse=');
+  if (markerIdx === -1) throw new Error('ytInitialPlayerResponse not found in page');
+
+  const jsonStart = html.indexOf('{', markerIdx);
+  if (jsonStart === -1) throw new Error('Opening brace not found');
+
+  // Slice from '{' to the first "};" that closes the top-level assignment
+  const jsonEnd = html.indexOf('};', jsonStart);
+  if (jsonEnd === -1) throw new Error('Closing }; not found');
+
+  let playerResponse;
+  try {
+    playerResponse = JSON.parse(html.slice(jsonStart, jsonEnd + 1));
+  } catch {
+    throw new Error('Failed to parse ytInitialPlayerResponse JSON');
+  }
 
   const tracks = playerResponse?.captions?.playerCaptionsTracklistRenderer?.captionTracks;
   if (!tracks?.length) throw new Error('No caption tracks available for this video');
 
-  // Prefer English; fall back to first available track
   const track =
     tracks.find(t => t.languageCode === 'en') ??
     tracks.find(t => t.languageCode?.startsWith('en')) ??
@@ -53,7 +53,7 @@ async function fetchYouTubeTranscript(videoId) {
 
   if (!track?.baseUrl) throw new Error('Caption track has no URL');
 
-  // JSON3 format: { events: [{ tStartMs, dDurationMs, segs: [{utf8}] }] }
+  // JSON3 format: events[].tStartMs + events[].segs[].utf8
   const captionRes = await fetch(`${track.baseUrl}&fmt=json3`);
   if (!captionRes.ok) throw new Error(`Caption fetch HTTP ${captionRes.status}`);
   const captionData = await captionRes.json();
@@ -76,7 +76,7 @@ export default async function handler(req, res) {
       const { title, events } = await fetchYouTubeTranscript(videoId);
 
       const filtered = events.filter(e => {
-        if (!e.segs) return false; // non-text event (music, formatting)
+        if (!e.segs) return false;
         if (startMs !== null && e.tStartMs < startMs) return false;
         if (endMs   !== null && e.tStartMs > endMs)   return false;
         return true;
