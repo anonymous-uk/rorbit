@@ -733,6 +733,14 @@ export default function ROrbit() {
           body: JSON.stringify(body),
         });
         const d = await r.json();
+        if (d.error === "RATE_LIMIT") {
+          setConnectError("Monthly transcript limit reached. Open the video on YouTube, click ⋯ below the video, select 'Open transcript', copy all the text, then paste it below.");
+          setConnectMode("text"); setConnectUrl(""); setAnalysing(false); return;
+        }
+        if (d.error === "FETCH_FAILED") {
+          setConnectError("Could not fetch transcript automatically. Switch to TEXT mode and paste the transcript from YouTube's 'Open transcript' panel.");
+          setConnectMode("text"); setAnalysing(false); return;
+        }
         if (d.error) { setConnectError(`Could not fetch URL: ${d.error}`); setAnalysing(false); return; }
         if (d.durationNote) setConnectDurationNote(d.durationNote);
         contentText = d.text;
