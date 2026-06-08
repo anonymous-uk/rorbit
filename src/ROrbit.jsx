@@ -752,9 +752,9 @@ export default function ROrbit() {
         method:"POST", headers:{ "Content-Type":"application/json" },
         body: JSON.stringify({
           model:MODEL, max_tokens:800,
-          system:"You are a pattern recognition engine. Return ONLY valid JSON.",
+          system:"You are a strict pattern recognition engine. Your job is to identify ONLY unmistakable, specific conceptual connections — not surface-level thematic overlap. It is completely acceptable and often correct to return zero or one match. Never pad results. Return ONLY valid JSON.",
           messages:[{ role:"user", content:
-            `Content to analyse:\n"${contentText}"\n\nKnowledge nodes:\n${nodeContext}\n\nIdentify which nodes have a GENUINE conceptual connection to this content. Only include nodes where the connection is specific and non-trivial — not just thematic overlap. Return JSON: {"matches": [{"nodeId": "...", "explanation": "2-3 sentences on exactly how and why this concept appears in the content. Be specific to the actual content, not generic."}]}. Max 5 matches.`
+            `Content:\n${contentText}\n\nKnowledge nodes:\n${nodeContext}\n\nFor each node, ask: does this specific content contain a clear, concrete instance of this concept — not just a related topic? Only return a node if you can point to a specific moment or argument in the content that directly demonstrates it. Return JSON: {"matches": [{"nodeId": "...", "explanation": "Quote or reference the specific part of the content where this concept appears, then explain the connection in 2 sentences."}]}. Return an empty matches array if nothing qualifies. No minimum. No padding.`
           }],
         }),
       });
