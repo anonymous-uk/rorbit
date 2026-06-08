@@ -168,8 +168,11 @@ export default function ROrbit() {
   const [connectText,    setConnectText]    = useState("");
   const [connectMode,    setConnectMode]    = useState("url");
   const [analysing,      setAnalysing]      = useState(false);
-  const [connectResults, setConnectResults] = useState(null);
-  const [connectError,   setConnectError]   = useState("");
+  const [connectResults,     setConnectResults]     = useState(null);
+  const [connectError,       setConnectError]       = useState("");
+  const [connectStartTime,   setConnectStartTime]   = useState("");
+  const [connectEndTime,     setConnectEndTime]      = useState("");
+  const [connectDurationNote,setConnectDurationNote] = useState("");
 
   // Inline ref sync
   selectedRef.current       = selected;
@@ -718,16 +721,20 @@ export default function ROrbit() {
   // ── API: Analyse Resource ─────────────────────────────────────────────────
   const analyseResource = async () => {
     if (analysing || !nodes.length) return;
-    setAnalysing(true); setConnectResults(null); setConnectError("");
+    setAnalysing(true); setConnectResults(null); setConnectError(""); setConnectDurationNote("");
     try {
       let contentText = "";
       if (connectMode === "url") {
+        const body = { url: connectUrl.trim() };
+        if (connectStartTime.trim()) body.startTime = connectStartTime.trim();
+        if (connectEndTime.trim())   body.endTime   = connectEndTime.trim();
         const r = await fetch("/api/fetch-url", {
           method:"POST", headers:{ "Content-Type":"application/json" },
-          body: JSON.stringify({ url: connectUrl.trim() }),
+          body: JSON.stringify(body),
         });
         const d = await r.json();
         if (d.error) { setConnectError(`Could not fetch URL: ${d.error}`); setAnalysing(false); return; }
+        if (d.durationNote) setConnectDurationNote(d.durationNote);
         contentText = d.text;
       } else {
         contentText = connectText.trim();
@@ -1225,9 +1232,25 @@ export default function ROrbit() {
                 </div>
 
                 {connectMode==="url" ? (
-                  <input value={connectUrl} onChange={e => setConnectUrl(e.target.value)}
-                    placeholder="Paste an article, video or podcast URL..."
-                    style={inp} />
+                  <>
+                    <input value={connectUrl} onChange={e => setConnectUrl(e.target.value)}
+                      placeholder="Paste an article, video or podcast URL..."
+                      style={inp} />
+                    {(connectUrl.includes("youtube.com") || connectUrl.includes("youtu.be")) && (
+                      <div style={{ display:"flex", gap:"8px" }}>
+                        <div style={{ flex:1 }}>
+                          <div style={{ fontFamily:mono, fontSize:"8px", color:T.textDim, letterSpacing:"1px", marginBottom:"4px" }}>FROM</div>
+                          <input value={connectStartTime} onChange={e => setConnectStartTime(e.target.value)}
+                            placeholder="0:00" style={{ ...inp, fontSize:"12px" }} />
+                        </div>
+                        <div style={{ flex:1 }}>
+                          <div style={{ fontFamily:mono, fontSize:"8px", color:T.textDim, letterSpacing:"1px", marginBottom:"4px" }}>TO</div>
+                          <input value={connectEndTime} onChange={e => setConnectEndTime(e.target.value)}
+                            placeholder="end" style={{ ...inp, fontSize:"12px" }} />
+                        </div>
+                      </div>
+                    )}
+                  </>
                 ) : (
                   <textarea value={connectText} onChange={e => setConnectText(e.target.value)}
                     placeholder="Paste a title, excerpt, or description..."
@@ -1251,6 +1274,9 @@ export default function ROrbit() {
 
                 {connectResults !== null && connectResults.length>0 && (
                   <div style={{ display:"flex", flexDirection:"column", gap:"8px" }}>
+                    {connectDurationNote && (
+                      <div style={{ fontFamily:mono, fontSize:"8px", color:T.textDim, letterSpacing:"1px" }}>{connectDurationNote}</div>
+                    )}
                     {connectResults.map(({ nodeId, explanation }) => {
                       const n  = nodes.find(nd => nd.id===nodeId);
                       if (!n) return null;
@@ -1267,7 +1293,7 @@ export default function ROrbit() {
                         </div>
                       );
                     })}
-                    <button onClick={() => { setConnectResults(null); setConnectUrl(""); setConnectText(""); setConnectError(""); }}
+                    <button onClick={() => { setConnectResults(null); setConnectUrl(""); setConnectText(""); setConnectError(""); setConnectStartTime(""); setConnectEndTime(""); setConnectDurationNote(""); }}
                       style={{ background:"none", border:`1px solid ${T.border}`, borderRadius:"4px", fontFamily:mono, color:T.textDim, fontSize:"8px", cursor:"pointer", padding:"4px 10px", letterSpacing:"1px", alignSelf:"flex-start" }}>CLEAR</button>
                   </div>
                 )}
