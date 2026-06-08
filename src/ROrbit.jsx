@@ -163,6 +163,14 @@ export default function ROrbit() {
   const [showBackup,  setShowBackup]       = useState(false);
   const [lastBackupInfo, setLastBackupInfo] = useState(() => { try { const s = localStorage.getItem("rorbit-backup-info"); return s ? JSON.parse(s) : null; } catch { return null; } });
 
+  // Connect
+  const [connectUrl,     setConnectUrl]     = useState("");
+  const [connectText,    setConnectText]    = useState("");
+  const [connectMode,    setConnectMode]    = useState("url");
+  const [analysing,      setAnalysing]      = useState(false);
+  const [connectResults, setConnectResults] = useState(null);
+  const [connectError,   setConnectError]   = useState("");
+
   // Inline ref sync
   selectedRef.current       = selected;
   reviewNodeRef.current     = reviewNode;
@@ -707,6 +715,42 @@ export default function ROrbit() {
     setEditing(true); setPanel("explore");
   };
 
+  // ── API: Analyse Resource ─────────────────────────────────────────────────
+  const analyseResource = async () => {
+    if (analysing || !nodes.length) return;
+    setAnalysing(true); setConnectResults(null); setConnectError("");
+    try {
+      let contentText = "";
+      if (connectMode === "url") {
+        const r = await fetch("/api/fetch-url", {
+          method:"POST", headers:{ "Content-Type":"application/json" },
+          body: JSON.stringify({ url: connectUrl.trim() }),
+        });
+        const d = await r.json();
+        if (d.error) { setConnectError(`Could not fetch URL: ${d.error}`); setAnalysing(false); return; }
+        contentText = d.text;
+      } else {
+        contentText = connectText.trim();
+      }
+      const nodeContext = nodes.map(n => `[${n.id}] ${n.title} (${n.category}): ${n.insight}`).join("\n");
+      const apiRes = await fetch(API_ENDPOINT, {
+        method:"POST", headers:{ "Content-Type":"application/json" },
+        body: JSON.stringify({
+          model:MODEL, max_tokens:800,
+          system:"You are a pattern recognition engine. Return ONLY valid JSON.",
+          messages:[{ role:"user", content:
+            `Content to analyse:\n"${contentText}"\n\nKnowledge nodes:\n${nodeContext}\n\nIdentify which nodes have a GENUINE conceptual connection to this content. Only include nodes where the connection is specific and non-trivial — not just thematic overlap. Return JSON: {"matches": [{"nodeId": "...", "explanation": "2-3 sentences on exactly how and why this concept appears in the content. Be specific to the actual content, not generic."}]}. Max 5 matches.`
+          }],
+        }),
+      });
+      const apiData = await apiRes.json();
+      const parsed  = JSON.parse((apiData.content?.find(b => b.type==="text")?.text ?? "{}").replace(/```json|```/g,"").trim());
+      const validIds = new Set(nodes.map(n => n.id));
+      setConnectResults((parsed.matches ?? []).filter(m => validIds.has(m.nodeId)));
+    } catch { setConnectError("Analysis failed. Try again."); }
+    setAnalysing(false);
+  };
+
   const saveEdit = () => {
     if (!reviewNode) return;
     const updated = { ...reviewNode,
@@ -884,8 +928,8 @@ export default function ROrbit() {
 
           {/* Tabs */}
           <div style={{ display:"flex", borderBottom:`1px solid ${T.border}`, flexShrink:0 }}>
-            {[["capture","CAPTURE"],["explore","EXPLORE"],["library","LIBRARY"]].map(([id, label]) => (
-              <button key={id} onClick={() => setPanel(id)} style={{ flex:1, padding:"11px 4px", background:"none", border:"none", borderBottom:`2px solid ${panel===id ? T.accent : "transparent"}`, color:panel===id ? T.accent : T.text, fontFamily:mono, fontSize:"9px", fontWeight:panel===id ? 700 : 500, letterSpacing:"1.5px", cursor:"pointer", opacity: panel===id ? 1 : 0.65 }}>{label}</button>
+            {[["capture","CAPTURE"],["explore","EXPLORE"],["library","LIBRARY"],["connect","CONNECT"]].map(([id, label]) => (
+              <button key={id} onClick={() => setPanel(id)} style={{ flex:1, padding:"11px 2px", background:"none", border:"none", borderBottom:`2px solid ${panel===id ? T.accent : "transparent"}`, color:panel===id ? T.accent : T.text, fontFamily:mono, fontSize:"8px", fontWeight:panel===id ? 700 : 500, letterSpacing:"0.5px", cursor:"pointer", opacity: panel===id ? 1 : 0.65 }}>{label}</button>
             ))}
           </div>
 
@@ -1162,6 +1206,73 @@ export default function ROrbit() {
                     </div>
                   )}
                 </div>
+              </div>
+            )}
+
+            {/* CONNECT */}
+            {panel==="connect" && (
+              <div style={{ display:"flex", flexDirection:"column", gap:"10px" }}>
+                <div style={lbl}>CONNECT A RESOURCE</div>
+
+                {/* Mode toggle */}
+                <div style={{ display:"flex", gap:"6px" }}>
+                  {[["url","URL"],["text","TEXT"]].map(([m, label]) => (
+                    <button key={m} onClick={() => { setConnectMode(m); setConnectResults(null); setConnectError(""); }}
+                      style={{ flex:1, padding:"6px", background:"none", border:`1px solid ${connectMode===m ? T.accent+"66" : T.inputBorder}`, borderRadius:"6px", color:connectMode===m ? T.accent : T.textDim, fontFamily:mono, fontSize:"9px", letterSpacing:"2px", cursor:"pointer" }}>
+                      {label}
+                    </button>
+                  ))}
+                </div>
+
+                {connectMode==="url" ? (
+                  <input value={connectUrl} onChange={e => setConnectUrl(e.target.value)}
+                    placeholder="Paste an article, video or podcast URL..."
+                    style={inp} />
+                ) : (
+                  <textarea value={connectText} onChange={e => setConnectText(e.target.value)}
+                    placeholder="Paste a title, excerpt, or description..."
+                    style={{ ...ta, minHeight:"100px" }} />
+                )}
+
+                <button onClick={analyseResource}
+                  disabled={analysing || !nodes.length || (connectMode==="url" ? !connectUrl.trim() : !connectText.trim())}
+                  style={aBtn(!analysing && nodes.length>0 && (connectMode==="url" ? !!connectUrl.trim() : !!connectText.trim()), T.accent)}>
+                  {analysing ? "ANALYSING..." : "◎ ANALYSE"}
+                </button>
+                <div style={{ fontFamily:mono, fontSize:"8px", color:T.textDim }}>Works with articles, YouTube pages, podcast show notes.</div>
+
+                {connectError && (
+                  <div style={{ fontSize:"11px", color:"#f87171", fontFamily:mono }}>{connectError}</div>
+                )}
+
+                {!analysing && connectResults !== null && connectResults.length===0 && !connectError && (
+                  <div style={{ fontSize:"12px", color:T.textDim }}>No strong connections found.</div>
+                )}
+
+                {connectResults !== null && connectResults.length>0 && (
+                  <div style={{ display:"flex", flexDirection:"column", gap:"8px" }}>
+                    {connectResults.map(({ nodeId, explanation }) => {
+                      const n  = nodes.find(nd => nd.id===nodeId);
+                      if (!n) return null;
+                      const cc = getcat(n.category);
+                      return (
+                        <div key={nodeId} onClick={() => setSelected(n)}
+                          style={{ background:T.nodeBg, border:`1px solid ${cc.color}25`, borderRadius:"8px", padding:"11px 12px", cursor:"pointer" }}>
+                          <div style={{ display:"flex", alignItems:"center", gap:"6px", marginBottom:"5px" }}>
+                            <div style={{ width:"5px", height:"5px", borderRadius:"50%", background:cc.color, boxShadow:`0 0 5px ${cc.color}`, flexShrink:0 }} />
+                            <span style={{ fontFamily:mono, fontSize:"8px", color:cc.color, letterSpacing:"1.5px" }}>{n.category.toUpperCase()}</span>
+                          </div>
+                          <div style={{ fontSize:"12px", fontWeight:500, color:T.text, marginBottom:"6px", lineHeight:1.4 }}>{n.title}</div>
+                          <div style={{ fontSize:"11px", color:T.textMuted, lineHeight:1.75 }}>{explanation}</div>
+                        </div>
+                      );
+                    })}
+                    <button onClick={() => { setConnectResults(null); setConnectUrl(""); setConnectText(""); setConnectError(""); }}
+                      style={{ background:"none", border:`1px solid ${T.border}`, borderRadius:"4px", fontFamily:mono, color:T.textDim, fontSize:"8px", cursor:"pointer", padding:"4px 10px", letterSpacing:"1px", alignSelf:"flex-start" }}>CLEAR</button>
+                  </div>
+                )}
+
+                {!nodes.length && <div style={{ fontSize:"12px", color:T.textDim }}>Add nodes first.</div>}
               </div>
             )}
           </div>
