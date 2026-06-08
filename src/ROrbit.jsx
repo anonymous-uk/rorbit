@@ -85,7 +85,7 @@ function ExampleBlock({ nodeObj, T, mono, isLight }) {
   );
 }
 
-function ConnectedNodes({ nodeObj, nodes, T, mono }) {
+function ConnectedNodes({ nodeObj, nodes, T, mono, onSelect }) {
   if (!nodeObj?.connections?.length) return null;
   const connected = nodeObj.connections.map(id => nodes.find(n => n.id === id)).filter(Boolean);
   if (!connected.length) return null;
@@ -95,9 +95,11 @@ function ConnectedNodes({ nodeObj, nodes, T, mono }) {
       {connected.map(cn => {
         const cc = getcat(cn.category);
         return (
-          <div key={cn.id} style={{ display:"flex", alignItems:"center", gap:"6px", marginBottom:"4px" }}>
+          <div key={cn.id}
+            onClick={() => onSelect?.(cn)}
+            style={{ display:"flex", alignItems:"center", gap:"6px", marginBottom:"4px", cursor: onSelect ? "pointer" : "default" }}>
             <div style={{ width:"4px", height:"4px", borderRadius:"50%", background:cc.color, flexShrink:0 }} />
-            <span style={{ fontSize:"11px", color:T.textMuted }}>{cn.title}</span>
+            <span style={{ fontSize:"11px", color: onSelect ? T.accent : T.textMuted, textDecoration: onSelect ? "underline" : "none" }}>{cn.title}</span>
           </div>
         );
       })}
@@ -148,12 +150,18 @@ export default function ROrbit() {
   const [recs,        setRecs]        = useState(null);
   const [loadingRecs, setLoadingRecs] = useState(false);
 
+  // Challenge examples
+  const [challengeExample,   setChallengeExample]   = useState("");
+  const [generatingExample,  setGeneratingExample]  = useState(false);
+  const [shownExamples,      setShownExamples]      = useState([]);
+
   // Cloud Backup
   const [githubToken, setGithubTokenState] = useState(() => { try { return localStorage.getItem(GH_TOKEN) || ""; } catch { return ""; } });
   const [gistId,      setGistIdState]      = useState(() => { try { return localStorage.getItem(GH_GIST)  || ""; } catch { return ""; } });
   const [backingUp,   setBackingUp]        = useState(false);
   const [backupMsg,   setBackupMsg]        = useState("");
   const [showBackup,  setShowBackup]       = useState(false);
+  const [lastBackupInfo, setLastBackupInfo] = useState(() => { try { const s = localStorage.getItem("rorbit-backup-info"); return s ? JSON.parse(s) : null; } catch { return null; } });
 
   // Inline ref sync
   selectedRef.current       = selected;
@@ -263,6 +271,9 @@ export default function ROrbit() {
       if (!res.ok) throw new Error(res.status);
       const data = await res.json();
       saveGistId(data.id);
+      const info = { count: nodes.length, time: new Date().toISOString() };
+      setLastBackupInfo(info);
+      try { localStorage.setItem("rorbit-backup-info", JSON.stringify(info)); } catch {}
       setBackupMsg(`✓ Backed up — ${nodes.length} nodes saved`);
     } catch (e) { setBackupMsg(`Failed (${e.message}). Check your token.`); }
     setBackingUp(false); setTimeout(() => setBackupMsg(""), 5000);
@@ -647,6 +658,7 @@ export default function ROrbit() {
     setNodes(stamped); persist(stamped);
 
     setReviewNode(rnd); setSelected(rnd); setChallenge(""); setEditing(false); setChallenging(true);
+    setChallengeExample(""); setShownExamples([]);
     try {
       const res = await fetch(API_ENDPOINT, {
         method:"POST", headers:{ "Content-Type":"application/json" },
@@ -664,7 +676,32 @@ export default function ROrbit() {
     setChallenging(false);
   };
 
-  const openEditFor = (node) => {
+  // ── API: Generate Example ─────────────────────────────────────────────────
+  const generateExample = async () => {
+    if (!reviewNode || generatingExample) return;
+    setGeneratingExample(true);
+    try {
+      const avoidStr = shownExamples.length > 0
+        ? `\n\nDo NOT repeat any of these already shown:\n${shownExamples.map((e, i) => `${i + 1}. ${e}`).join("\n")}`
+        : "";
+      const res = await fetch(API_ENDPOINT, {
+        method:"POST", headers:{ "Content-Type":"application/json" },
+        body: JSON.stringify({
+          model:MODEL, max_tokens:300,
+          system:"Generate a single concrete real-world example. Return only the example itself — no labels, no preamble, no 'For example:'.",
+          messages:[{ role:"user", content:
+            `Concept: "${reviewNode.title}" — ${reviewNode.insight}\nCategory: ${reviewNode.category}\n\nGive one vivid, specific real-world example of this concept in action. A specific scenario, observable human behaviour, historical moment, or everyday situation. Make it immediately recognisable.${avoidStr}`
+          }]
+        })
+      });
+      const data = await res.json();
+      const ex = data.content?.find(b => b.type==="text")?.text?.trim() ?? "";
+      if (ex) { setChallengeExample(ex); setShownExamples(prev => [...prev, ex]); }
+    } catch {}
+    setGeneratingExample(false);
+  };
+
+
     setReviewNode(node); setSelected(node);
     setEditData({ title:node.title, insight:node.insight, example:node.example||"", category:node.category, tags:node.tags.join(", ") });
     setEditing(true); setPanel("explore");
@@ -792,7 +829,7 @@ export default function ROrbit() {
               <div style={{ fontSize:"13px", fontWeight:500, color:T.text, marginBottom:"7px", lineHeight:1.4 }}>{selected.title}</div>
               <div style={{ fontSize:"12px", color:T.textMuted, lineHeight:1.75 }}>{selected.insight}</div>
               <ExampleBlock nodeObj={selected} T={T} mono={mono} isLight={isLight} />
-              <ConnectedNodes nodeObj={selected} nodes={nodes} T={T} mono={mono} />
+              <ConnectedNodes nodeObj={selected} nodes={nodes} T={T} mono={mono} onSelect={n => { setSelected(n); }} />
               {selected.tags?.length > 0 && (
                 <div style={{ display:"flex", gap:"5px", flexWrap:"wrap", marginTop:"10px" }}>
                   {selected.tags.map(t => <span key={t} style={{ fontFamily:mono, fontSize:"9px", background:T.tagBg, border:`1px solid ${T.tagBorder}`, padding:"2px 8px", borderRadius:"20px", color:T.tagText }}>#{t}</span>)}
@@ -817,7 +854,7 @@ export default function ROrbit() {
                   <div style={{ fontFamily:mono, fontSize:"8px", color:selCat.color, letterSpacing:"2px", marginBottom:"6px" }}>{selected.category.toUpperCase()}</div>
                   <div style={{ fontSize:"12px", color:T.textMuted, lineHeight:1.75 }}>{selected.insight}</div>
                   <ExampleBlock nodeObj={selected} T={T} mono={mono} isLight={isLight} />
-                  <ConnectedNodes nodeObj={selected} nodes={nodes} T={T} mono={mono} />
+                  <ConnectedNodes nodeObj={selected} nodes={nodes} T={T} mono={mono} onSelect={n => { setSelected(n); }} />
                   {selected.tags?.length > 0 && (
                     <div style={{ display:"flex", gap:"4px", flexWrap:"wrap", marginTop:"8px" }}>
                       {selected.tags.map(t => <span key={t} style={{ fontFamily:mono, fontSize:"9px", background:T.tagBg, border:`1px solid ${T.tagBorder}`, padding:"2px 7px", borderRadius:"20px", color:T.tagText }}>#{t}</span>)}
@@ -876,15 +913,15 @@ export default function ROrbit() {
                 <div style={{ display:"flex", gap:"8px", marginTop:"2px" }}>
                   <button onClick={() => addThought("keep")} disabled={adding||!input.trim()}
                     style={{ ...aBtn(!!input.trim()&&!adding, T.accent), flex:1, fontSize:"9px", letterSpacing:"1px" }}>
-                    {adding && addMode==="keep" ? "PROCESSING..." : "✎ KEEP MY WORDS"}
+                    {adding && addMode==="keep" ? "PROCESSING..." : "✎ POLISH"}
                   </button>
                   <button onClick={() => addThought("enhance")} disabled={adding||!input.trim()}
                     style={{ ...aBtn(!!input.trim()&&!adding, T.accentG), flex:1, fontSize:"9px", letterSpacing:"1px" }}>
-                    {adding && addMode==="enhance" ? "PROCESSING..." : "✦ AI ENHANCE"}
+                    {adding && addMode==="enhance" ? "PROCESSING..." : "✦ ENHANCE"}
                   </button>
                 </div>
                 <div style={{ fontFamily:mono, fontSize:"8px", color:T.textDim }}>
-                  <span style={{ color:T.accent }}>✎ Keep</span> — grammar fixes only &nbsp;·&nbsp; <span style={{ color:T.accentG }}>✦ Enhance</span> — AI synthesises
+                  <span style={{ color:T.accent }}>✎ Polish</span> — grammar & spelling only &nbsp;·&nbsp; <span style={{ color:T.accentG }}>✦ Enhance</span> — AI synthesises
                 </div>
 
                 {lastAdded && (
@@ -902,26 +939,8 @@ export default function ROrbit() {
             {/* EXPLORE */}
             {panel==="explore" && (
               <div style={{ display:"flex", flexDirection:"column", gap:"10px" }}>
-                <div style={lbl}>QUERY YOUR SPHERE</div>
-                <textarea value={queryText} onChange={e => setQueryText(e.target.value)}
-                  placeholder="Describe a problem or challenge..."
-                  style={{ ...ta, minHeight:"80px" }} />
-                <button onClick={doQuery} disabled={querying||!queryText.trim()||!nodes.length} style={aBtn(!!queryText.trim()&&!querying&&nodes.length>0, T.accentG)}>
-                  {querying ? "SEARCHING..." : "SEARCH SPHERE"}
-                </button>
-                {synthesis && (
-                  <div style={{ background:T.synBg, border:`1px solid ${T.border}`, borderRadius:"6px", padding:"12px" }}>
-                    <div style={lbl}>SYNTHESIS</div>
-                    <div style={{ fontSize:"12px", color:T.textMuted, lineHeight:1.8 }}>{synthesis}</div>
-                    <div style={{ fontFamily:mono, fontSize:"9px", color:T.textDim, marginTop:"6px" }}>{highlighted.length} nodes highlighted on sphere</div>
-                    <button onClick={() => { setHighlighted([]); setSynthesis(""); setQueryText(""); }}
-                      style={{ marginTop:"8px", background:"none", border:`1px solid ${T.border}`, borderRadius:"4px", fontFamily:mono, color:T.textDim, fontSize:"8px", cursor:"pointer", padding:"3px 10px", letterSpacing:"1px" }}>CLEAR</button>
-                  </div>
-                )}
-                {!nodes.length && <div style={{ fontSize:"12px", color:T.textDim }}>Add nodes first.</div>}
 
-                {dividerEl}
-
+                {/* CHALLENGE — now first */}
                 <div style={lbl}>CHALLENGE YOUR THINKING</div>
                 <button onClick={challengeMe} disabled={challenging||!nodes.length} style={aBtn(!challenging&&nodes.length>0, T.accent)}>
                   {challenging ? "THINKING..." : "↺ RANDOM NODE"}
@@ -934,13 +953,14 @@ export default function ROrbit() {
                       <div style={{ fontSize:"13px", fontWeight:500, color:T.text, marginBottom:"6px", lineHeight:1.4 }}>{reviewNode.title}</div>
                       <div style={{ fontSize:"12px", color:T.textMuted, lineHeight:1.75 }}>{reviewNode.insight}</div>
                       <ExampleBlock nodeObj={reviewNode} T={T} mono={mono} isLight={isLight} />
-                      <ConnectedNodes nodeObj={reviewNode} nodes={nodes} T={T} mono={mono} />
+                      <ConnectedNodes nodeObj={reviewNode} nodes={nodes} T={T} mono={mono} onSelect={n => { setSelected(n); setReviewNode(n); }} />
                       {reviewNode.tags?.length > 0 && (
                         <div style={{ display:"flex", gap:"4px", flexWrap:"wrap", marginTop:"8px" }}>
                           {reviewNode.tags.map(t => <span key={t} style={{ fontFamily:mono, fontSize:"9px", background:T.tagBg, border:`1px solid ${T.tagBorder}`, padding:"2px 7px", borderRadius:"20px", color:T.tagText }}>#{t}</span>)}
                         </div>
                       )}
                     </div>
+
                     {challenging && <div style={{ fontSize:"12px", color:T.textDim }}>Generating question...</div>}
                     {challenge && !challenging && (
                       <div style={{ background:T.challengeBg, border:`1px solid ${T.challengeBorder}`, borderRadius:"6px", padding:"12px" }}>
@@ -948,6 +968,19 @@ export default function ROrbit() {
                         <div style={{ fontSize:"13px", color:T.text, lineHeight:1.8 }}>{challenge}</div>
                       </div>
                     )}
+
+                    {/* Example on demand */}
+                    <button onClick={generateExample} disabled={generatingExample}
+                      style={{ ...aBtn(!generatingExample, T.accentG), fontSize:"9px" }}>
+                      {generatingExample ? "GENERATING..." : shownExamples.length > 0 ? "↺ ANOTHER EXAMPLE" : "◈ SHOW AN EXAMPLE"}
+                    </button>
+                    {challengeExample && !generatingExample && (
+                      <div style={{ background: isLight ? "#e8f4ff" : "#071e35", border:`1px solid ${isLight ? "#b0c8da" : "#1a3a55"}`, borderRadius:"6px", padding:"12px" }}>
+                        <div style={{ fontFamily:mono, fontSize:"8px", color:T.textDim, letterSpacing:"2px", marginBottom:"7px" }}>EXAMPLE {shownExamples.length > 1 ? `(${shownExamples.length})` : ""}</div>
+                        <div style={{ fontSize:"12px", color:T.textMuted, lineHeight:1.8, fontStyle:"italic" }}>{challengeExample}</div>
+                      </div>
+                    )}
+
                     <button onClick={() => openEditFor(reviewNode)} style={{ ...aBtn(true, T.textMuted), fontSize:"9px" }}>✎ EDIT THIS NODE</button>
                   </div>
                 )}
@@ -980,6 +1013,27 @@ export default function ROrbit() {
                     <button onClick={() => deleteNode(reviewNode.id)} style={{ width:"100%", padding:"8px", background:"none", border:"1px solid #f8717130", borderRadius:"6px", color:"#f87171", fontFamily:mono, fontSize:"9px", letterSpacing:"1.5px", cursor:"pointer" }}>DELETE NODE</button>
                   </div>
                 )}
+
+                {dividerEl}
+
+                {/* QUERY — now second */}
+                <div style={lbl}>QUERY YOUR SPHERE</div>
+                <textarea value={queryText} onChange={e => setQueryText(e.target.value)}
+                  placeholder="Describe a problem or challenge..."
+                  style={{ ...ta, minHeight:"80px" }} />
+                <button onClick={doQuery} disabled={querying||!queryText.trim()||!nodes.length} style={aBtn(!!queryText.trim()&&!querying&&nodes.length>0, T.accentG)}>
+                  {querying ? "SEARCHING..." : "SEARCH SPHERE"}
+                </button>
+                {synthesis && (
+                  <div style={{ background:T.synBg, border:`1px solid ${T.border}`, borderRadius:"6px", padding:"12px" }}>
+                    <div style={lbl}>SYNTHESIS</div>
+                    <div style={{ fontSize:"12px", color:T.textMuted, lineHeight:1.8 }}>{synthesis}</div>
+                    <div style={{ fontFamily:mono, fontSize:"9px", color:T.textDim, marginTop:"6px" }}>{highlighted.length} nodes highlighted on sphere</div>
+                    <button onClick={() => { setHighlighted([]); setSynthesis(""); setQueryText(""); }}
+                      style={{ marginTop:"8px", background:"none", border:`1px solid ${T.border}`, borderRadius:"4px", fontFamily:mono, color:T.textDim, fontSize:"8px", cursor:"pointer", padding:"3px 10px", letterSpacing:"1px" }}>CLEAR</button>
+                  </div>
+                )}
+                {!nodes.length && <div style={{ fontSize:"12px", color:T.textDim }}>Add nodes first.</div>}
               </div>
             )}
 
@@ -1066,7 +1120,15 @@ export default function ROrbit() {
                 {dividerEl}
                 <div style={{ display:"flex", flexDirection:"column", gap:"10px" }}>
                   <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between" }}>
+                  <div style={{ display:"flex", alignItems:"center", gap:"6px" }}>
                     <div style={lbl}>CLOUD BACKUP</div>
+                    {nodes.length > 0 && nodes.length !== lastBackupInfo?.count && (
+                      <span style={{ fontFamily:mono, fontSize:"8px", color:"#f59e0b", letterSpacing:"1px" }}>⚠ unsaved</span>
+                    )}
+                    {nodes.length > 0 && nodes.length === lastBackupInfo?.count && (
+                      <span style={{ fontFamily:mono, fontSize:"8px", color:T.accentG, letterSpacing:"1px" }}>✓ backed up</span>
+                    )}
+                  </div>
                     <button onClick={() => setShowBackup(b => !b)} style={{ background:"none", border:"none", fontFamily:mono, fontSize:"9px", color:T.textDim, cursor:"pointer", letterSpacing:"1px" }}>
                       {showBackup ? "▲ HIDE" : "▼ SETUP"}
                     </button>
