@@ -22,13 +22,25 @@ export default async function handler(req, res) {
     );
 
     if (apiRes.status === 429) return res.status(200).json({ error: 'RATE_LIMIT' });
-    if (!apiRes.ok)            return res.status(200).json({ error: 'FETCH_FAILED' });
 
-    let data;
-    try { data = await apiRes.json(); } catch { return res.status(200).json({ error: 'FETCH_FAILED' }); }
+    // Read body once so we can include it in error detail regardless of status
+    let responseBody;
+    try { responseBody = await apiRes.json(); } catch { responseBody = null; }
 
-    const chunks = data?.chunks;
-    if (!chunks?.length) return res.status(200).json({ error: 'FETCH_FAILED' });
+    if (!apiRes.ok) {
+      return res.status(200).json({
+        error: 'FETCH_FAILED',
+        detail: `Supadata status: ${apiRes.status}, body: ${JSON.stringify(responseBody)}`,
+      });
+    }
+
+    const chunks = responseBody?.chunks;
+    if (!chunks?.length) {
+      return res.status(200).json({
+        error: 'FETCH_FAILED',
+        detail: `Supadata status: ${apiRes.status}, body: ${JSON.stringify(responseBody)}`,
+      });
+    }
 
     const startMs = parseTimeToMs(startTime);
     const endMs   = parseTimeToMs(endTime);

@@ -738,7 +738,7 @@ export default function ROrbit() {
           setConnectMode("text"); setConnectUrl(""); setAnalysing(false); return;
         }
         if (d.error === "FETCH_FAILED") {
-          setConnectError("Could not fetch transcript automatically. Switch to TEXT mode and paste the transcript from YouTube's 'Open transcript' panel.");
+          setConnectError("Could not fetch transcript automatically. Switch to TEXT mode and paste the transcript from YouTube's 'Open transcript' panel." + (d.detail ? `\n\n${d.detail}` : ""));
           setConnectMode("text"); setAnalysing(false); return;
         }
         if (d.error) { setConnectError(`Could not fetch URL: ${d.error}`); setAnalysing(false); return; }
@@ -1273,7 +1273,7 @@ export default function ROrbit() {
                 <div style={{ fontFamily:mono, fontSize:"8px", color:T.textDim }}>Works with articles, YouTube pages, podcast show notes.</div>
 
                 {connectError && (
-                  <div style={{ fontSize:"11px", color:"#f87171", fontFamily:mono }}>{connectError}</div>
+                  <div style={{ fontSize:"11px", color:"#f87171", fontFamily:mono, whiteSpace:"pre-wrap", wordBreak:"break-all" }}>{connectError}</div>
                 )}
 
                 {!analysing && connectResults !== null && connectResults.length===0 && !connectError && (
