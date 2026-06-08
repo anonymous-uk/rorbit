@@ -701,7 +701,7 @@ export default function ROrbit() {
     setGeneratingExample(false);
   };
 
-
+  const openEditFor = (node) => {
     setReviewNode(node); setSelected(node);
     setEditData({ title:node.title, insight:node.insight, example:node.example||"", category:node.category, tags:node.tags.join(", ") });
     setEditing(true); setPanel("explore");
