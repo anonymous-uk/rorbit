@@ -34,8 +34,8 @@ export default async function handler(req, res) {
       });
     }
 
-    const chunks = responseBody?.chunks;
-    if (!chunks?.length) {
+    const content = responseBody?.content;
+    if (!content?.length) {
       return res.status(200).json({
         error: 'FETCH_FAILED',
         detail: `Supadata status: ${apiRes.status}, body: ${JSON.stringify(responseBody)}`,
@@ -45,7 +45,7 @@ export default async function handler(req, res) {
     const startMs = parseTimeToMs(startTime);
     const endMs   = parseTimeToMs(endTime);
 
-    const filtered = chunks.filter(c => {
+    const filtered = content.filter(c => {
       if (startMs !== null && c.offset < startMs) return false;
       if (endMs   !== null && c.offset > endMs)   return false;
       return true;
